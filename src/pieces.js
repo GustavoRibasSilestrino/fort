@@ -148,12 +148,11 @@ export class Piece {
     const rnd = () => { st = (st * 1664525 + 1013904223) >>> 0; return st / 4294967296; };
     const PAL = ['#8b5a3c', '#a8693f', '#c47a4a', '#6b4129', '#d08a5a', '#7a4a2e', '#b87445', '#935c38'];
     const N = 15, slot = G / N;
-    // tabua de fundo escura (fecha as frestas para a colisao/visual)
-    for (const r of maskRects(m, 3, 3)) box(r.c0 * tw, (r.c1 + 1) * tw, r.r0, r.r1 + 1, 0.04, new THREE.Color('#2e1a0f'));
+    // sem tabua de fundo: as frestas entre as toras sao vazadas
     const slotOff = new Array(N);
     for (let k = 0; k < N; k++) {
       const col = new THREE.Color(PAL[(rnd() * PAL.length) | 0]).multiplyScalar(0.9 + rnd() * 0.2);
-      const w = slot * (0.8 + rnd() * 0.25) * 0.5;
+      const w = slot * (0.5 + rnd() * 0.2) * 0.5;
       const cx = (k + 0.5) * slot;
       const tile = Math.min(2, Math.floor(cx / tw));
       let off = (rnd() - 0.5) * slot * 0.5;
@@ -179,11 +178,12 @@ export class Piece {
     for (const r of maskRects(m, 3, 3)) {
       // tabuas (estilo "plastico"): faixas com cor levemente diferente e frestas finas
       const xa = x0 + r.c0 * tw, xb = x0 + (r.c1 + 1) * tw, za = z0 + r.r0 * tw, zb = z0 + (r.r1 + 1) * tw;
-      b.addBox(xa, this.y - T - sk, za, xb, this.y - 0.02, zb, tr, tr);
-      const n = Math.max(1, Math.round((xb - xa) / 0.5)), sw = (xb - xa) / n;
+      const wood = this.mat === 'wood';
+      if (!wood) b.addBox(xa, this.y - T - sk, za, xb, this.y - 0.02, zb, tr, tr);   // madeira: piso vazado entre as tabuas
+      const n = Math.max(1, Math.round((xb - xa) / 0.5)), sw = (xb - xa) / n, gp = wood ? 0.07 : 0.015;
       for (let k = 0; k < n; k++) {
         const col = c.clone().multiplyScalar(k % 2 ? 0.93 : 1.05 + ((k * 7) % 5) * 0.01);
-        b.addBox(xa + k * sw + 0.015, this.y - 0.08, za, xa + (k + 1) * sw - 0.015, this.y, zb, col, col);
+        b.addBox(xa + k * sw + gp, this.y - (wood ? T : 0.08), za, xa + (k + 1) * sw - gp, this.y, zb, col, col);
       }
     }
     const dn = this.y - T - 0.2 - sk;
@@ -419,16 +419,88 @@ function aabbOf(o) {
 }
 // Regra de construcao: so pode colocar uma peca encostada em outra ja existente.
 // A primeira peca (sem vizinhas) so pode ser no chao, ao lado de onde o jogador esta.
+// escada: so as pontas (embaixo e em cima) conectam; as outras pecas usam a caixa inteira
+function connBoxes(o) {
+  if (o.type !== 'ramp') return [aabbOf(o)];
+  const x0 = o.i * G, z0 = o.j * G, x1 = x0 + G, z1 = z0 + G, y = o.y, w = 0.25;
+  switch (o.dir) {
+    case 0: return [[x1 - w, y + H - 0.4, z0, x1, y + H, z1], [x0, y - 0.2, z0, x0 + w, y + 0.2, z1]];
+    case 2: return [[x0, y + H - 0.4, z0, x0 + w, y + H, z1], [x1 - w, y - 0.2, z0, x1, y + 0.2, z1]];
+    case 1: return [[x0, y + H - 0.4, z1 - w, x1, y + H, z1], [x0, y - 0.2, z0, x1, y + 0.2, z0 + w]];
+    default: return [[x0, y + H - 0.4, z0, x1, y + H, z0 + w], [x0, y - 0.2, z1 - w, x1, y + 0.2, z1]];
+  }
+}
+const boxHit = (b, q, e) => b[0] - e <= q[3] && b[3] + e >= q[0] && b[1] - e <= q[4] && b[4] + e >= q[1] && b[2] - e <= q[5] && b[5] + e >= q[2];
 export function canPlace(t, a) {
-  const b = aabbOf(t), e = 0.2;
+  const tb = connBoxes(t), e = 0.2;
+  if (t.type === 'floor' || t.type === 'roof') {   // nao vale piso/cone em cima da propria escada
+    for (const p of allPieces) if (p.type === 'ramp' && p.i === t.i && p.j === t.j && t.y > p.y + 0.5) return false;
+  }
   for (const p of allPieces) {
-    const q = aabbOf(p);
-    if (b[0] - e <= q[3] && b[3] + e >= q[0] && b[1] - e <= q[4] && b[4] + e >= q[1] && b[2] - e <= q[5] && b[5] + e >= q[2]) return true;
+    for (const q of connBoxes(p)) for (const b of tb) if (boxHit(b, q, e)) return true;
   }
   const pci = Math.floor(a.x / G), pcj = Math.floor(a.z / G);
   const dci = t.type === 'wall' && t.axis === 'z' ? Math.min(Math.abs(t.i - 1 - pci), Math.abs(t.i - pci)) : Math.abs(t.i - pci);
   const dcj = t.type === 'wall' && t.axis === 'x' ? Math.min(Math.abs(t.j - 1 - pcj), Math.abs(t.j - pcj)) : Math.abs(t.j - pcj);
   return dci <= 1 && dcj <= 1 && Math.abs(t.y - a.y) < 0.8;
+}
+
+// Se o alvo da mira nao encaixa em nenhuma peca, procura o encaixe valido mais proximo da mira
+// (ex.: olhando para o ceu, o piso vai para a ponta da escada).
+export function findSnap(type, a, cam, dir, mat, prefDir) {
+  const near = [];
+  for (const p of allPieces) {
+    const c = p.center();
+    if (Math.hypot(c[0] - a.x, c[2] - a.z) < 34) near.push(p);
+  }
+  if (near.length > 120) near.length = 120;
+  const seen = new Set(), cands = [];
+  const add = (o) => {
+    o.type = type; o.mat = mat;
+    const k = pieceKey(o);
+    if (seen.has(k)) return;
+    seen.add(k);
+    const bx = aabbOf(o);
+    const cx = (bx[0] + bx[3]) / 2, cy = (bx[1] + bx[4]) / 2, cz = (bx[2] + bx[5]) / 2;
+    const vx = cx - cam.x, vy = cy - cam.y, vz = cz - cam.z;
+    const t = vx * dir.x + vy * dir.y + vz * dir.z;
+    const qx = vx - dir.x * t, qy = vy - dir.y * t, qz = vz - dir.z * t;
+    let score = Math.hypot(qx, qy, qz);
+    if (t < 0) score += 40 + -t;
+    if (type === 'ramp' && o.dir !== prefDir) score += 1.5;
+    o.score = score;
+    cands.push(o);
+  };
+  const cells = [];
+  const pci = Math.floor(a.x / G), pcj = Math.floor(a.z / G);
+  for (let di = -1; di <= 1; di++) for (let dj = -1; dj <= 1; dj++) cells.push([pci + di, pcj + dj, 0]);
+  for (const p of near) cells.push([p.i, p.j, p.y]);
+  for (const [pi, pj, py] of cells) {
+    for (let di = -1; di <= 1; di++) {
+      for (let dj = -1; dj <= 1; dj++) {
+        const i = pi + di, j = pj + dj;
+        for (const y of py === 0 ? [0, H] : [py - H, py, py + H]) {
+          if (type === 'wall') {
+            add({ axis: 'x', i, j, y }); add({ axis: 'x', i, j: j + 1, y });
+            add({ axis: 'z', i, j, y }); add({ axis: 'z', i: i + 1, j, y });
+          } else if (type === 'ramp') {
+            for (let d = 0; d < 4; d++) add({ i, j, y, dir: d });
+          } else add({ i, j, y });
+        }
+      }
+    }
+  }
+  cands.sort((p, q) => p.score - q.score);
+  for (const o of cands) {
+    if (o.score > 60) break;
+    if (type === 'floor' || type === 'roof') {   // nao vale piso/cone em cima da propria escada
+      let over = false;
+      for (const p of near) if (p.type === 'ramp' && p.i === o.i && p.j === o.j && o.y > p.y + 0.5) { over = true; break; }
+      if (over) continue;
+    }
+    if (!pieceExists(o) && canPlace(o, a)) return o;
+  }
+  return null;
 }
 
 export function skirtFor(i, j, y) {

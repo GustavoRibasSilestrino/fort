@@ -4,7 +4,7 @@ import { clamp, lerp, TAU } from './util.js';
 import { makeActor } from './actors.js';
 import { Inventory } from './inventory.js';
 import { moveActor, raycast, supportAt } from './physics.js';
-import { ghostGeometry, damagePiece, pieceExists, isPiece, allPieces, canPlace } from './pieces.js';
+import { ghostGeometry, damagePiece, pieceExists, isPiece, allPieces, canPlace, findSnap } from './pieces.js';
 import { buildTargetAim, placePiece } from './build.js';
 import { shoot, traceShot, damageActor } from './combat.js';
 import { startEdit, updateEdit, endEdit, isEditing } from './edit.js';
@@ -391,7 +391,11 @@ function buildLogic(dt) {
   const p = player, inv = p.inv;
   ps.buildCd -= dt;
   S.camera.getWorldDirection(_f);
-  const t = buildTargetAim(p, S.camera.position, _f, ps.camYaw, ps.buildType, ps.buildMat);
+  let t = buildTargetAim(p, S.camera.position, _f, ps.camYaw, ps.buildType, ps.buildMat);
+  if (pieceExists(t) || !canPlace(t, p)) {
+    const sn = findSnap(ps.buildType, p, S.camera.position, _f, ps.buildMat, t.dir);
+    if (sn) t = sn;
+  }
   const cost = 10;
     ps.buildValid = !pieceExists(t) && canPlace(t, p) && (S.infMats || inv.mats[ps.buildMat] >= cost);
   ps.buildTarget = t;
