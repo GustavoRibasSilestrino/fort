@@ -176,7 +176,16 @@ export class Piece {
     const tw = G / 3, m = this.mask, c = this.color, tr = this.trim;
     const sk = this.skirt || 0;
     const x0 = this.i * G, z0 = this.j * G;
-    for (const r of maskRects(m, 3, 3)) b.addBox(x0 + r.c0 * tw, this.y - T - sk, z0 + r.r0 * tw, x0 + (r.c1 + 1) * tw, this.y, z0 + (r.r1 + 1) * tw, c, tr);
+    for (const r of maskRects(m, 3, 3)) {
+      // tabuas (estilo "plastico"): faixas com cor levemente diferente e frestas finas
+      const xa = x0 + r.c0 * tw, xb = x0 + (r.c1 + 1) * tw, za = z0 + r.r0 * tw, zb = z0 + (r.r1 + 1) * tw;
+      b.addBox(xa, this.y - T - sk, za, xb, this.y - 0.02, zb, tr, tr);
+      const n = Math.max(1, Math.round((xb - xa) / 0.5)), sw = (xb - xa) / n;
+      for (let k = 0; k < n; k++) {
+        const col = c.clone().multiplyScalar(k % 2 ? 0.93 : 1.05 + ((k * 7) % 5) * 0.01);
+        b.addBox(xa + k * sw + 0.015, this.y - 0.08, za, xa + (k + 1) * sw - 0.015, this.y, zb, col, col);
+      }
+    }
     const dn = this.y - T - 0.2 - sk;
     for (const e of edgeBeams(m, 3, 3)) {
       if (e.kind === 'h') {
@@ -400,8 +409,31 @@ export function hasPieceBelow(i, j, y) {
   return false;
 }
 
+// caixa (aabb) aproximada de uma peca, para saber se duas pecas se encostam
+function aabbOf(o) {
+  const x0 = o.i * G, z0 = o.j * G, y = o.y;
+  if (o.type === 'wall') return o.axis === 'x' ? [x0, y, z0 - T / 2, x0 + G, y + H, z0 + T / 2] : [x0 - T / 2, y, z0, x0 + T / 2, y + H, z0 + G];
+  if (o.type === 'floor') return [x0, y - T, z0, x0 + G, y, z0 + G];
+  if (o.type === 'ramp') return [x0, y, z0, x0 + G, y + H, z0 + G];
+  return [x0, y, z0, x0 + G, y + ROOF_PEAK, z0 + G];
+}
+// Regra de construcao: so pode colocar uma peca encostada em outra ja existente.
+// A primeira peca (sem vizinhas) so pode ser no chao, ao lado de onde o jogador esta.
+export function canPlace(t, a) {
+  const b = aabbOf(t), e = 0.2;
+  for (const p of allPieces) {
+    const q = aabbOf(p);
+    if (b[0] - e <= q[3] && b[3] + e >= q[0] && b[1] - e <= q[4] && b[4] + e >= q[1] && b[2] - e <= q[5] && b[5] + e >= q[2]) return true;
+  }
+  const pci = Math.floor(a.x / G), pcj = Math.floor(a.z / G);
+  const dci = t.type === 'wall' && t.axis === 'z' ? Math.min(Math.abs(t.i - 1 - pci), Math.abs(t.i - pci)) : Math.abs(t.i - pci);
+  const dcj = t.type === 'wall' && t.axis === 'x' ? Math.min(Math.abs(t.j - 1 - pcj), Math.abs(t.j - pcj)) : Math.abs(t.j - pcj);
+  return dci <= 1 && dcj <= 1 && Math.abs(t.y - a.y) < 0.8;
+}
+
 export function skirtFor(i, j, y) {
   if (hasPieceBelow(i, j, y)) return 0;
+  if (y > 0.9) return 0;   // piso no alto fica fino, sem virar um bloco
   const m = Math.min(
     heightAt(i * G, j * G), heightAt((i + 1) * G, j * G), heightAt(i * G, (j + 1) * G), heightAt((i + 1) * G, (j + 1) * G),
   );

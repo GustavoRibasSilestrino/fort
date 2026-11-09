@@ -8,14 +8,20 @@ export const slopeAt = () => 0;
 export const padAt = () => null;
 
 function groundTexture(renderer) {
+  // estilo Roblox: base verde com "studs" (pininhos) a cada 1 m
   const cv = document.createElement('canvas');
-  cv.width = cv.height = 256; // 2x2 celulas de 4 m = 8 m
+  cv.width = cv.height = 512; // 8 m x 8 m
   const ctx = cv.getContext('2d');
-  const cols = ['#7fd24f', '#72c746'];
-  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) { ctx.fillStyle = cols[(i + j) % 2]; ctx.fillRect(i * 128, j * 128, 128, 128); }
-  ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-  ctx.lineWidth = 3;
-  for (let i = 0; i < 2; i++) for (let j = 0; j < 2; j++) ctx.strokeRect(i * 128 + 1.5, j * 128 + 1.5, 125, 125);
+  ctx.fillStyle = '#4fbf3a'; ctx.fillRect(0, 0, 512, 512);
+  const cell = 64; // 1 m
+  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
+    const cx = i * cell + cell / 2, cy = j * cell + cell / 2;
+    ctx.fillStyle = 'rgba(0,70,0,0.28)'; ctx.beginPath(); ctx.ellipse(cx + 3, cy + 5, 17, 14, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#6bd84f'; ctx.beginPath(); ctx.ellipse(cx, cy, 17, 14, 0, 0, 7); ctx.fill();
+    ctx.fillStyle = '#86e868'; ctx.beginPath(); ctx.ellipse(cx - 2, cy - 3, 11, 8, 0, 0, 7); ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2;
+  for (let i = 0; i <= 8; i += 4) { ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, 512); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(512, i * cell); ctx.stroke(); }
   const tex = new THREE.CanvasTexture(cv);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   tex.repeat.set((WORLD_HALF * 2) / 8, (WORLD_HALF * 2) / 8);

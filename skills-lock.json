@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "video-character-design": {
+      "source": "agentara/skills",
+      "sourceType": "github",
+      "skillPath": "skills/aigc/video-character-design/SKILL.md",
+      "computedHash": "99b181da43f1064e7f57b867773cd891487669b2e2bd0b4e537317cf0cfe52ab"
+    }
+  }
+}
