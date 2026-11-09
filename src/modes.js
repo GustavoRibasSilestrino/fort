@@ -1,5 +1,5 @@
 import { S } from './state.js';
-import { player, giveLoadout, respawnPlayer, ps } from './player.js';
+import { player, giveLoadout, respawnPlayer, ps, setBuildMode } from './player.js';
 import { bot, createBot, respawnBot, createDummy, placeDummy, removeDummy, dummy, updateBot, updateDummy } from './bots.js';
 import { clearAllPieces } from './pieces.js';
 import { setWorldLimit } from './physics.js';
@@ -8,6 +8,7 @@ import { on, emit } from './events.js';
 import { toast } from './hud.js';
 import { sfx } from './audio.js';
 import { hit, binds, keyName } from './bind.js';
+import { NET, sendRound, sendDie, setRemoteActor, updateRemote, endMatchNet } from './net.js';
 
 // Estado dos modos de jogo: 'freebuild' (treino livre) e 'duel' (1v1)
 export const M = { type: 'freebuild', score: [0, 0], goal: 5, state: 'idle', timer: 0, round: 0, diff: 'normal', lastCount: 0 };
@@ -15,7 +16,8 @@ S.duel = M;
 const ARENA = { freebuild: 280, duel: 75 };
 let rings = [];
 
-export function startMode(type, diff) {
+export function startMode(type, diff, online = false) {
+  M.online = online;
   M.type = type; M.diff = diff || 'normal';
   S.mode = type;
   S.infMats = type === 'freebuild';
@@ -31,6 +33,9 @@ export function startMode(type, diff) {
   giveLoadout(type);
   if (!bot) createBot();
   if (!dummy) createDummy();
+  bot.remote = online;
+  if (online) { setRemoteActor(bot); bot.name = NET.oppName; NET.inMatch = true; NET.target = null; }
+  const sb = document.querySelector('#score .sc.bot span'); if (sb) sb.textContent = online ? NET.oppName.toUpperCase().slice(0, 8) : 'BOT';
   if (type === 'freebuild') {
     respawnPlayer(0, 0, 0);
     removeDummy();
@@ -40,7 +45,8 @@ export function startMode(type, diff) {
   } else {
     M.score = [0, 0]; M.round = 0;
     rings.push(makeSpawnRing(S.scene, 0, 38, '#3fb6ff'), makeSpawnRing(S.scene, 0, -38, '#ff5470'));
-    startRound();
+    if (online) { if (NET.host) { startRound(); sendRound({ n: 1 }); } else { M.state = 'wait'; S.freeze = true; toast('Aguardando o anfitrião...', false, 2000); } }
+    else startRound();
   }
 }
 
@@ -48,10 +54,14 @@ function startRound() {
   M.round++;
   clearAllPieces();
   giveLoadout('duel');
-  respawnPlayer(0, 38, 0);
-  respawnBot(0, -38, Math.PI, M.diff);
+  const meSouth = !M.online || NET.host;           // anfitriao nasce em z=38, convidado em z=-38
+  respawnPlayer(0, meSouth ? 38 : -38, meSouth ? 0 : Math.PI);
+  respawnBot(0, meSouth ? -38 : 38, meSouth ? Math.PI : 0, M.diff);
+  if (M.online) { bot.remote = true; bot.model.hold('pickaxe', 0); NET.target = null; }
   S.freeze = true; S.freezeAI = false;
-  M.state = 'countdown'; M.timer = 3.5; M.lastCount = 4;
+  M.state = 'countdown'; M.timer = 5.0; M.lastCount = 6;
+  setBuildMode(false);
+  toast('Construção liberada em 5s', false, 1800);
   emit('roundStart', M.round);
 }
 
@@ -78,28 +88,38 @@ export function updateMode(dt) {
     return;
   }
   // duelo
+  if (M.online) updateRemote(dt);
   if (M.state === 'countdown') {
     M.timer -= dt;
     const n = Math.ceil(M.timer);
-    if (n !== M.lastCount && n > 0 && n <= 3) { M.lastCount = n; toast(String(n), true, 900); sfx.empty(); }
-    if (M.timer <= 0) { M.state = 'fight'; S.freeze = false; toast('LUTE!', true, 1100); sfx.chest(); }
+    if (n !== M.lastCount && n > 0 && n <= 5) { M.lastCount = n; toast(String(n), true, 900); sfx.empty(); }
+    if (M.timer <= 0) { M.state = 'fight'; S.freeze = false; toast('LUTE! Construção liberada', true, 1400); sfx.chest(); }
   } else if (M.state === 'between') {
     M.timer -= dt;
-    if (M.timer <= 0) startRound();
+    if (M.timer <= 0 && (!M.online || NET.host)) { startRound(); if (M.online) sendRound({ n: M.round }); }
   }
-  updateBot(dt);
+  if (!M.online) updateBot(dt);
 }
 
 on('kill', ({ victim, attacker }) => {
   if (M.type !== 'duel' || M.state !== 'fight') return;
-  const me = victim === player ? 1 : 0;
+  if (M.online && victim === player) sendDie();
   M.score[victim === player ? 1 : 0]++;
   M.state = 'between'; M.timer = 2.6;
   S.freezeAI = true;
-  toast(victim === player ? 'Você foi eliminado' : 'Você eliminou o bot!', true, 2000);
+  toast(victim === player ? 'Você foi eliminado' : (M.online ? `Você eliminou ${NET.oppName}!` : 'Você eliminou o bot!'), true, 2000);
   if (M.score[0] >= M.goal || M.score[1] >= M.goal) {
     M.state = 'over';
     S.phase = 'over';
     emit('duelOver', { win: M.score[0] >= M.goal, score: [...M.score] });
   }
 });
+
+// partida online: o convidado inicia a rodada quando o anfitriao avisa
+NET.onRound = () => { if (M.online && M.state !== 'over') startRound(); };
+NET.onEnd = () => {
+  if (!M.online || S.phase === 'over') return;
+  M.state = 'over'; S.phase = 'over';
+  emit('duelOver', { win: true, score: [...M.score], left: true });
+};
+export function leaveOnline() { endMatchNet(); }

@@ -7,6 +7,7 @@ import { impact, tracer, explosionFx, debris } from './fx.js';
 import { sfx } from './audio.js';
 import { emit } from './events.js';
 import { S } from './state.js';
+import { NET, sendHit, noteFire } from './net.js';
 
 // ===== Testes de raio contra atores =====
 function raySphere(ox, oy, oz, dx, dy, dz, cx, cy, cz, r) {
@@ -67,6 +68,10 @@ export function traceShot(ox, oy, oz, dx, dy, dz, range, shooter) {
 // ===== Dano =====
 export function damageActor(v, dmg, attacker, head, wname) {
   if (!v.alive || v.mode === 'bus' || v.mode === 'dead') return;
+  if (v.remote) {   // oponente online: ele mesmo aplica o dano
+    if (attacker && attacker.isPlayer) { sendHit(dmg, head, wname); emit('hitmarker', { head, dmg, killed: false, x: v.x, y: v.y + 1.8, z: v.z }); }
+    return;
+  }
   if (v.god) {
     if (attacker && attacker.isPlayer && attacker !== v) emit('hitmarker', { head, dmg, killed: false, x: v.x, y: v.y + 1.8, z: v.z });
     if (v.isPlayer) emit('playerHurt', { dmg, attacker });
@@ -100,6 +105,7 @@ const _m = new THREE.Vector3();
 
 export function shoot(shooter, wkey, rarity, ox, oy, oz, dir, spread, dmgMult, muzzle) {
   const W = WEAPONS[wkey];
+  if (shooter.isPlayer) noteFire();
   if (W.projectile) { launchRocket(shooter, wkey, rarity, ox, oy, oz, dir, muzzle); return; }
   _r.crossVectors(dir, _up).normalize();
   _u.crossVectors(_r, dir).normalize();

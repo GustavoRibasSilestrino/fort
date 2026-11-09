@@ -32,6 +32,17 @@
     background: linear-gradient(180deg, #fff27a, #ffc21f); border-radius: 6px; transform: skew(-6deg); box-shadow: 0 6px 0 #b9780a, 0 12px 24px rgba(0,0,0,.4); transition: transform .08s, box-shadow .08s; }
   .modeBtn small { display: block; font: 600 15px 'Segoe UI', sans-serif; font-style: normal; letter-spacing: 0; margin-top: 2px; color: #3a2a80; }
   .modeBtn.duel { background: linear-gradient(180deg, #8fe3ff, #3aa6ff); box-shadow: 0 6px 0 #1c64b5, 0 12px 24px rgba(0,0,0,.4); }
+  .modeBtn.online { background: linear-gradient(180deg, #b8ff9a, #3ecf5a); box-shadow: 0 6px 0 #1f8a37, 0 12px 24px rgba(0,0,0,.4); }
+  #lobby { z-index: 70; }
+  .lobbyBox { width: min(560px, 94vw); background: #120d4a; border: 2px solid rgba(255,255,255,.25); border-radius: 12px; padding: 18px 22px; text-align: left; box-shadow: 0 14px 50px rgba(0,0,0,.6); }
+  .lobbyBox h2 { margin: 0 0 8px; font-size: 38px; font-style: italic; color: #7dff9a; letter-spacing: 2px; }
+  .lobbyBox input { font: 700 20px var(--font); padding: 8px 12px; border-radius: 8px; border: 2px solid #4a3fa8; background: #170f55; color: #fff; outline: none; width: 100%; }
+  .lobbyBox label { display: block; margin: 10px 0 4px; font-size: 14px; letter-spacing: 2px; color: #9fd0ff; text-transform: uppercase; }
+  #peerList { margin-top: 12px; max-height: 240px; overflow-y: auto; }
+  .peer { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; margin-bottom: 6px; background: rgba(255,255,255,.08); border-left: 5px solid #3ecf5a; font-size: 22px; }
+  .peer.busy { border-color: #ff9d00; opacity: .7; }
+  .peer small { font: 600 13px 'Segoe UI', sans-serif; color: #bcd; margin-left: 8px; }
+  #inviteBox { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 95; background: rgba(10,8,40,.95); border: 3px solid #7dff9a; padding: 14px 22px; font-size: 26px; font-style: italic; text-align: center; }
   .modeBtn:hover { transform: skew(-6deg) translateY(-2px); filter: brightness(1.08); }
   .modeBtn:active { transform: skew(-6deg) translateY(4px); box-shadow: 0 2px 0 #b9780a; }
   #score { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: center; width: 340px; }
@@ -190,6 +201,7 @@
     <div class="panel">
       <button class="modeBtn" id="freeBtn">FREEBUILD<small>Mundo plano para treinar construção. Materiais e munição infinitos.</small></button>
       <button class="modeBtn duel" id="duelBtn">DUELO 1V1<small>Você contra um bot que atira e constrói. Primeiro a 5 eliminações.</small></button>
+      <button class="modeBtn online" id="onlineBtn">X1 ONLINE<small>Veja quem está online e convide um amigo para um x1.</small></button>
       <label>Dificuldade do bot</label>
       <select id="diffIn"><option value="easy">Fácil</option><option value="normal" selected>Normal</option><option value="hard">Difícil</option></select>
       <button class="btn sec openSettings" style="width:100%;margin:14px 0 0">CONFIGURAÇÕES &bull; TECLAS &bull; MOUSE</button>
@@ -205,6 +217,18 @@
   </div>
   <div id="loading"><div>CARREGANDO ILHA...</div><div class="bar"><i id="loadBar"></i></div></div>
 </div>
+
+<div id="lobby" class="screen hidden">
+  <div class="lobbyBox">
+    <h2>X1 ONLINE</h2>
+    <label>Seu nome</label><input type="text" id="netName" maxlength="14">
+    <label>Código da sala (combine com seus amigos)</label><input type="text" id="netLobby" maxlength="24" value="amigos">
+    <div style="margin-top:12px"><button class="btn small" id="netJoin">ENTRAR</button> <button class="btn sec small" id="netClose">VOLTAR</button></div>
+    <div id="netStatus" class="snote" style="margin-top:8px">Digite o mesmo código que seu amigo para se encontrarem.</div>
+    <div id="peerList"></div>
+  </div>
+</div>
+<div id="inviteBox" class="hidden"><span id="inviteTxt"></span><div style="margin-top:8px"><button class="btn small" id="invYes">ACEITAR</button> <button class="btn sec small" id="invNo">RECUSAR</button></div></div>
 
 <div id="pause" class="screen hidden"><h1>PAUSADO</h1><div style="font-size:28px;margin:10px 0 20px">Clique para continuar</div><div><button class="btn" id="resumeBtn">CONTINUAR</button><button class="btn sec openSettings">CONFIGURAÇÕES</button><button class="btn sec" id="menuBtn">MENU</button></div></div>
 

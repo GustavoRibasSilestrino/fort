@@ -1,4 +1,5 @@
 import { build, context } from 'esbuild';
+import { readFileSync, writeFileSync } from 'node:fs';
 
 const watch = process.argv.includes('--watch');
 const opts = {
@@ -18,4 +19,11 @@ if (watch) {
   console.log('Observando alteracoes...');
 } else {
   await build(opts);
+}
+
+// FortBuild.html = index.html com o game.js embutido (arquivo unico)
+if (!watch) {
+  const html = readFileSync('index.html', 'utf8');
+  const js = readFileSync('game.js', 'utf8').replace(/<\/script/gi, '<\/script');
+  writeFileSync('FortBuild.html', html.replace('<script src="game.js"></script>', () => '<script>' + js + '</script>'));
 }

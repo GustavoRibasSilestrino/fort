@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { G, SLOPE } from './config.js';
+import { G, H, SLOPE } from './config.js';
 import { S } from './state.js';
 import { raycast, ROOF_PEAK } from './physics.js';
 import { isPiece, setMask, FULL_MASK, GRID } from './pieces.js';
@@ -7,6 +7,7 @@ import { mouse } from './input.js';
 import { hit, down } from './bind.js';
 import { emit } from './events.js';
 import { sfx } from './audio.js';
+import { sendMask } from './net.js';
 
 // Modo de edicao (estilo Fortnite): grade de tiles sobre uma peca sua.
 // Parede, piso e cone: 3x3. Escada: 2x2. Clique (ou arraste) para tirar/devolver partes.
@@ -48,7 +49,7 @@ function buildTiles() {
     for (let c = 0; c < nc; c++) {
       let m;
       if (p.type === 'wall') {
-        const wh = 3 / nr;
+        const wh = H / nr;
         const geo = new THREE.PlaneGeometry(tw - 0.1, wh - 0.1);
         m = new THREE.Mesh(geo, MATS.on);
         if (p.axis === 'x') {
@@ -99,7 +100,7 @@ export function endEdit(apply) {
   if (!E.active) return;
   if (apply) {
     if (!E.mask.some(Boolean)) emit('toast', 'Deixe ao menos uma parte');
-    else if (E.mask.some((v, i) => v !== E.piece.mask[i])) { setMask(E.piece, E.mask); sfx.build(); }
+    else if (E.mask.some((v, i) => v !== E.piece.mask[i])) { setMask(E.piece, E.mask); sendMask(E.piece); sfx.build(); }
   }
   E.active = false; E.piece = null; E.paint = null; E.dirty = false;
   clearTiles();
@@ -111,7 +112,7 @@ function hoverTile() {
   const { nc, nr } = E;
   let t, col, row;
   if (p.type === 'wall') {
-    const wh = 3 / nr;
+    const wh = H / nr;
     let a, b;
     if (p.axis === 'x') { if (Math.abs(_d.z) < 1e-5) return -1; t = (p.j * G - o.z) / _d.z; if (t < 0 || t > 40) return -1; a = o.x + _d.x * t - p.i * G; b = o.y + _d.y * t - p.y; }
     else { if (Math.abs(_d.x) < 1e-5) return -1; t = (p.i * G - o.x) / _d.x; if (t < 0 || t > 40) return -1; a = o.z + _d.z * t - p.j * G; b = o.y + _d.y * t - p.y; }

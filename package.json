@@ -12,6 +12,7 @@
   "type": "commonjs",
   "dependencies": {
     "esbuild": "^0.28.2",
-    "three": "^0.187.0"
+    "three": "^0.187.0",
+    "trystero": "^0.26.0"
   }
 }

@@ -28,7 +28,7 @@ export function buildTargetAim(a, cam, dir, camYaw, type, mat) {
 
   // 1) ponto para onde a mira aponta
   let Px, Py, Pz, hitPiece = null, hitTop = false, hitTerrain = false, hit = false;
-  const r = raycast(cam.x, cam.y, cam.z, dir.x, dir.y, dir.z, 18);
+  const r = raycast(cam.x, cam.y, cam.z, dir.x, dir.y, dir.z, 30);
   if (r) {
     hit = true;
     Px = cam.x + dir.x * r.t; Py = cam.y + dir.y * r.t; Pz = cam.z + dir.z * r.t;
@@ -55,8 +55,8 @@ export function buildTargetAim(a, cam, dir, camYaw, type, mat) {
   else yRef = hit ? Qy : Math.max(Qy, standY);
   yRef = clampN(yRef, standY - H, standY + 2 * H + 0.5);
 
-  const ci = clampN(Math.floor(Qx / G), pci - 3, pci + 3);
-  const cj = clampN(Math.floor(Qz / G), pcj - 3, pcj + 3);
+  const ci = Math.floor(Qx / G);
+  const cj = Math.floor(Qz / G);
   const fx = Qx - ci * G, fz = Qz - cj * G;       // posicao dentro da celula
 
   if (type === 'wall') {
@@ -66,37 +66,20 @@ export function buildTargetAim(a, cam, dir, camYaw, type, mat) {
       { d: fx, axis: 'z', i: ci, j: cj }, { d: G - fx, axis: 'z', i: ci + 1, j: cj },
       { d: fz, axis: 'x', i: ci, j: cj }, { d: G - fz, axis: 'x', i: ci, j: cj + 1 },
     ].sort((p, q) => p.d - q.d);
-    let pick = edges[0];
-    for (const e of edges) { if (!pieceExists({ type: 'wall', axis: e.axis, i: e.i, j: e.j, y })) { pick = e; break; } }
+    const pick = edges[0];   // sempre a borda mais proxima do ponto mirado
     return { type: 'wall', axis: pick.axis, i: pick.i, j: pick.j, y, mat };
   }
 
   if (type === 'floor' || type === 'roof') {
-    let i = ci, j = cj;
-    // se a celula ja tem a peca, vai para a vizinha do lado da borda mais proxima
-    const probe = (ii, jj, yy) => pieceExists({ type, i: ii, j: jj, y: yy });
-    let y = latticeY(i, j, yRef, 'round');
-    if (probe(i, j, y)) {
-      const opts = [[fx, -1, 0], [G - fx, 1, 0], [fz, 0, -1], [G - fz, 0, 1]].sort((p, q) => p[0] - q[0]);
-      for (const [, dx, dz] of opts) {
-        const ni = i + dx, nj = j + dz;
-        const ny = latticeY(ni, nj, y, 'round');
-        if (!probe(ni, nj, ny)) { i = ni; j = nj; y = ny; break; }
-      }
-    }
+    const i = ci, j = cj;
+    const y = latticeY(i, j, yRef, 'round');
     return { type, i, j, y, mat };
   }
 
   // escada: sobe no sentido para onde a camera olha; pode ficar em cima de um piso
   const dirN = dirFromYaw(camYaw);
-  let i = ci, j = cj;
-  let y = latticeY(i, j, yRef, 'round');
-  const exists = (ii, jj, yy) => pieceExists({ type: 'ramp', i: ii, j: jj, y: yy, dir: dirN });
-  if (exists(i, j, y)) {
-    // continua a escada para cima, na frente da anterior
-    const ni = i + DX[dirN], nj = j + DZ[dirN], ny = y + H;
-    if (!exists(ni, nj, ny)) { i = ni; j = nj; y = ny; }
-  }
+  const i = ci, j = cj;
+  const y = latticeY(i, j, yRef, 'round');
   return { type: 'ramp', i, j, dir: dirN, y, mat };
 }
 

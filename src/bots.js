@@ -125,6 +125,7 @@ function botFire(b, t, dt, dist, visible) {
 
 export function updateBot(dt) {
   const b = bot;
+  if (b && b.remote) return;
   if (!b || !b.alive) { updateDead(b); return; }
   const ai = b.ai, t = S.player;
   const frozen = S.freeze || S.freezeAI || !t.alive;

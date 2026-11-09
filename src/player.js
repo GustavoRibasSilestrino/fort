@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { GRAVITY, WEAPONS, CONSUMABLES, MATS, STEP } from './config.js';
+import { GRAVITY, WEAPONS, CONSUMABLES, MATS, STEP, G } from './config.js';
 import { clamp, lerp, TAU } from './util.js';
 import { makeActor } from './actors.js';
 import { Inventory } from './inventory.js';
 import { moveActor, raycast, supportAt } from './physics.js';
-import { ghostGeometry, damagePiece, pieceExists, isPiece } from './pieces.js';
+import { ghostGeometry, damagePiece, pieceExists, isPiece, allPieces } from './pieces.js';
 import { buildTargetAim, placePiece } from './build.js';
 import { shoot, traceShot, damageActor } from './combat.js';
 import { startEdit, updateEdit, endEdit, isEditing } from './edit.js';
@@ -14,6 +14,7 @@ import { mouse, input } from './input.js';
 import { down, hit } from './bind.js';
 import { emit } from './events.js';
 import { S } from './state.js';
+import { sendBuild, sendState } from './net.js';
 
 export const player = makeActor({ name: 'Você', isPlayer: true });
 player.inv = new Inventory();
@@ -94,8 +95,17 @@ function updateCamera(dt) {
   const px = p.x, py = p.y + eyeH, pz = p.z;
   fwdVec(yaw, pitch, _f);
   const rx = Math.cos(yaw), rz = -Math.sin(yaw);
-  const camBase = S.settings.camDist || 2.9;
-  const dist = ps.buildMode || isEditing() ? camBase + 1.0 : lerp(camBase, camBase * 0.82, ps.aimK);
+  // camera dinamica: perto de construcoes aproxima, longe afasta
+  let nearD = 1e9;
+  for (const pc of allPieces) {
+    const cc = pc.center();
+    const d = Math.hypot(cc[0] - p.x, cc[2] - p.z);
+    if (d < nearD) nearD = d;
+  }
+  const nearT = nearD < 4 ? 0.62 : nearD > 16 ? 1.12 : 1.12 - 0.5 * (1 - (nearD - 4) / 12) ** 1.3;
+  ps.nearK = lerp(ps.nearK === undefined ? 1 : ps.nearK, nearT, Math.min(1, dt * 3));
+  const camBase = (S.settings.camDist || 2.2) * ps.nearK;
+  const dist = ps.buildMode || isEditing() ? camBase + 0.4 : lerp(camBase, camBase * 0.82, ps.aimK);
   const shoulder = lerp(0.68, 0.85, ps.aimK);
   const ox = px + rx * shoulder, oy = py, oz = pz + rz * shoulder;
   let dx = -_f.x * dist, dy = -_f.y * dist + 0.2, dz = -_f.z * dist;
@@ -383,7 +393,9 @@ function buildLogic(dt) {
   S.camera.getWorldDirection(_f);
   const t = buildTargetAim(p, S.camera.position, _f, ps.camYaw, ps.buildType, ps.buildMat);
   const cost = 10;
-  ps.buildValid = !pieceExists(t) && (S.infMats || inv.mats[ps.buildMat] >= cost);
+  const tc = (() => { const q = new (class { constructor() { this.type = t.type; this.i = t.i; this.j = t.j; this.axis = t.axis; this.y = t.y; } center() { return t.type === 'wall' ? (t.axis === 'x' ? [t.i * G + G / 2, t.y, t.j * G] : [t.i * G, t.y, t.j * G + G / 2]) : [t.i * G + G / 2, t.y, t.j * G + G / 2]; } })(); return q.center(); })();
+  const inReach = Math.hypot(tc[0] - p.x, tc[2] - p.z) < 30;
+  ps.buildValid = inReach && !pieceExists(t) && (S.infMats || inv.mats[ps.buildMat] >= cost);
   ps.buildTarget = t;
   ensureGhost();
   const key = `${t.type}|${t.axis || ''}|${t.i}|${t.j}|${Math.round(t.y * 4)}|${t.dir ?? ''}`;
@@ -396,6 +408,7 @@ function buildLogic(dt) {
       const piece = placePiece(t, 'player');
       if (piece) {
         if (!S.infMats) inv.mats[ps.buildMat] -= cost;
+        sendBuild(t);
         sfx.build();
         const c = piece.center();
         debris(c[0], Math.max(0.3, c[1] - 0.8), c[2], MATS[ps.buildMat].color, 4);
@@ -474,4 +487,5 @@ export function updatePlayer(dt) {
   if (ps.aiming) spT *= 0.4;
   ps.crossSpread += (Math.min(36, spT) - ps.crossSpread) * Math.min(1, dt * 14);
   syncModel(dt);
+  { const sl = curSlot(); sendState(dt, p, ps, sl && sl.kind === 'weapon' ? sl.wkey : 'pickaxe'); }
 }

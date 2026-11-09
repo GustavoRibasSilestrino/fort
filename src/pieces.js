@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { G, H, SLOPE, MATS } from './config.js';
+import { G, H, TH, SLOPE, MATS } from './config.js';
 import { GeomBuilder, clamp } from './util.js';
 import { boxCollider, rampCollider, roofCollider, removeCollider, ROOF_PEAK } from './physics.js';
 import { heightAt } from './terrain.js';
@@ -92,7 +92,7 @@ export class Piece {
     if (this.type === 'wall') {
       for (const r of maskRects(this.mask, 3, 3)) {
         const a0 = r.c0 * tw, a1 = (r.c1 + 1) * tw;
-        const y0 = this.y + r.r0 - (r.r0 === 0 ? sk : 0), y1 = this.y + r.r1 + 1;
+        const y0 = this.y + r.r0 * TH - (r.r0 === 0 ? sk : 0), y1 = this.y + (r.r1 + 1) * TH;
         if (this.axis === 'x') out.push([this.i * G + a0, y0, this.j * G - T / 2, this.i * G + a1, y1, this.j * G + T / 2]);
         else out.push([this.i * G - T / 2, y0, this.j * G + a0, this.i * G + T / 2, y1, this.j * G + a1]);
       }
@@ -120,18 +120,54 @@ export class Piece {
   fillWall(b) {
     const tw = G / 3, m = this.mask, c = this.color, tr = this.trim;
     const box = (a0, a1, b0, b1, half, col) => {
-      const y0 = this.y + b0, y1 = this.y + b1;
+      const y0 = this.y + b0 * TH, y1 = this.y + b1 * TH;
       if (this.axis === 'x') b.addBox(this.i * G + a0, y0, this.j * G - half, this.i * G + a1, y1, this.j * G + half, col, col);
       else b.addBox(this.i * G - half, y0, this.j * G + a0, this.i * G + half, y1, this.j * G + a1, col, col);
     };
-    for (const r of maskRects(m, 3, 3)) box(r.c0 * tw, (r.c1 + 1) * tw, r.r0, r.r1 + 1, 0.08, c);
+    const wood = this.mat === 'wood';
+    if (wood) this.fillLogs(b, box);
+    else for (const r of maskRects(m, 3, 3)) box(r.c0 * tw, (r.c1 + 1) * tw, r.r0, r.r1 + 1, 0.08, c);
+    const rail = wood ? new THREE.Color('#5a3720') : tr;
     for (const e of edgeBeams(m, 3, 3)) {
       if (e.kind === 'h') {
-        const b0 = e.side > 0 ? e.line : e.line - BW * 1.4, b1 = e.side > 0 ? e.line + BW * 1.4 : e.line;
-        box(e.i0 * tw, (e.i1 + 1) * tw, b0, b1, T / 2, tr);
+        const bw = BW * 1.4 / TH;
+        const b0 = e.side > 0 ? e.line : e.line - bw, b1 = e.side > 0 ? e.line + bw : e.line;
+        box(e.i0 * tw, (e.i1 + 1) * tw, b0, b1, T / 2, rail);
       } else {
         const a0 = e.side > 0 ? e.line * tw : e.line * tw - BW, a1 = e.side > 0 ? e.line * tw + BW : e.line * tw;
-        box(a0, a1, e.i0, e.i1 + 1, T / 2, tr);
+        box(a0, a1, e.i0, e.i1 + 1, T / 2, rail);
+      }
+    }
+  }
+
+  // parede de madeira: toras verticais tortas, de cores variadas (como uma cerca de troncos)
+  fillLogs(b, box) {
+    const tw = G / 3, m = this.mask;
+    const seed = (this.i * 73856093) ^ (this.j * 19349663) ^ ((this.y * 100) | 0) ^ (this.axis === 'x' ? 5 : 9);
+    let st = seed >>> 0 || 1;
+    const rnd = () => { st = (st * 1664525 + 1013904223) >>> 0; return st / 4294967296; };
+    const PAL = ['#8b5a3c', '#a8693f', '#c47a4a', '#6b4129', '#d08a5a', '#7a4a2e', '#b87445', '#935c38'];
+    const N = 15, slot = G / N;
+    // tabua de fundo escura (fecha as frestas para a colisao/visual)
+    for (const r of maskRects(m, 3, 3)) box(r.c0 * tw, (r.c1 + 1) * tw, r.r0, r.r1 + 1, 0.04, new THREE.Color('#2e1a0f'));
+    const slotOff = new Array(N);
+    for (let k = 0; k < N; k++) {
+      const col = new THREE.Color(PAL[(rnd() * PAL.length) | 0]).multiplyScalar(0.9 + rnd() * 0.2);
+      const w = slot * (0.8 + rnd() * 0.25) * 0.5;
+      const cx = (k + 0.5) * slot;
+      const tile = Math.min(2, Math.floor(cx / tw));
+      let off = (rnd() - 0.5) * slot * 0.5;
+      for (let r = 0; r < 3; r++) {
+        const next = (rnd() - 0.5) * slot * 0.6;
+        if (m[r * 3 + tile]) {
+          const hw = w;
+          // cada segmento: tora de 2 camadas (miolo claro + laterais escuras) para dar volume arredondado
+          box(cx + off - hw, cx + off + hw, r, r + 1, 0.1, col.clone().multiplyScalar(0.8));
+          box(cx + off - hw * 0.55, cx + off + hw * 0.55, r, r + 1, 0.125, col);
+          // nos / veios
+          if (rnd() < 0.4) box(cx + off - hw * 0.4, cx + off + hw * 0.4, r + 0.3 + rnd() * 0.4, r + 0.36 + rnd() * 0.4, 0.13, col.clone().multiplyScalar(0.6));
+        }
+        off = next;
       }
     }
   }

@@ -90,13 +90,35 @@ const HAIRS = ['#2b1b10', '#5a3a1a', '#c9a227', '#161616', '#7a2a1a', '#cfcfcf',
 const SKINS = ['#f2c9a0', '#e0ac80', '#c68642', '#8d5524', '#ffdbac'];
 const HATS = [null, 'cap', 'helmet', 'beanie', null];
 
+// Skin padrao de todos os personagens: sem camisa, calca cargo bege, tenis branco/marrom, tranças, correntes e tatuagens
+export const SKIN_OUTFIT = { style: 'rapper', skin: '#7a4a2e', hair: '#17110d', pants: '#8c7352', shirt: '#7a4a2e', pack: '#2f2a26', hat: null, hatColor: '#000000' };
 export function randomOutfit() {
+  return { ...SKIN_OUTFIT };
+}
+export function randomOutfitOld() {
   return { shirt: pick(SHIRTS), pants: pick(PANTS), hair: pick(HAIRS), skin: pick(SKINS), hat: pick(HATS), hatColor: pick(SHIRTS), pack: pick(['#3b3b44', '#7a5a3a', '#2f4f6f', '#6a2f3f']) };
 }
 
 // torso + mochila (origem no quadril)
 function torsoGeo(o) {
   const b = new GeomBuilder();
+  if (o.style === 'rapper') {
+    const sk = C(o.skin), ink = C('#2b1a12'), band = C('#e9e6df');
+    b.addBox(-0.25, 0.0, -0.14, 0.25, 0.62, 0.14, sk, sk.clone().multiplyScalar(0.85));
+    b.addBox(-0.12, 0.34, -0.145, 0.12, 0.5, -0.14, sk.clone().multiplyScalar(1.12));      // peitoral
+    b.addBox(-0.015, 0.1, -0.145, 0.015, 0.34, -0.14, sk.clone().multiplyScalar(0.75));    // linha do abdomen
+    for (const [x, y, w] of [[-0.14, 0.18, 0.07], [0.07, 0.2, 0.07], [-0.1, 0.1, 0.05], [0.12, 0.08, 0.05]]) b.addBox(x, y, -0.147, x + w, y + 0.05, -0.14, ink); // tatuagens
+    b.addBox(-0.26, 0.0, -0.15, 0.26, 0.1, 0.15, C('#8c7352'));                            // cos da calca
+    b.addBox(-0.262, 0.07, -0.152, 0.262, 0.12, 0.152, band);                                // elastico branco
+    // correntes prateadas e pingente
+    const chain = C('#d8dde3'), dk = C('#8a2d2d');
+    b.addBox(-0.13, 0.54, -0.15, 0.13, 0.57, -0.14, chain);
+    b.addBox(-0.09, 0.45, -0.15, 0.09, 0.48, -0.14, chain);
+    b.addBox(-0.03, 0.3, -0.15, 0.03, 0.46, -0.145, chain);
+    b.addBox(-0.04, 0.27, -0.155, 0.04, 0.38, -0.145, dk);
+    b.addBox(-0.2, 0.06, 0.14, 0.2, 0.5, 0.26, C(o.pack));
+    return b.build();
+  }
   const shirt = C(o.shirt);
   b.addBox(-0.25, 0.0, -0.14, 0.25, 0.62, 0.14, shirt, shirt.clone().multiplyScalar(0.8));
   b.addBox(-0.255, 0.0, -0.145, 0.255, 0.09, 0.145, C('#2b2b2f'));
@@ -113,6 +135,21 @@ function headGeo(o) {
   b.addBox(-0.11, 0.18, -0.175, -0.05, 0.24, -0.17, C('#1b1b1b'));
   b.addBox(0.05, 0.18, -0.175, 0.11, 0.24, -0.17, C('#1b1b1b'));
   b.addBox(-0.05, 0.09, -0.175, 0.05, 0.11, -0.17, C('#a0524a'));
+  if (o.style === 'rapper') {
+    const braid = C(o.hair), dk = braid.clone().multiplyScalar(1.6);
+    b.addBox(-0.18, 0.31, -0.18, 0.18, 0.4, 0.18, braid);                    // topo
+    b.addBox(-0.18, 0.28, -0.18, 0.18, 0.33, -0.12, braid);                  // franja
+    b.addBox(-0.18, 0.1, 0.12, 0.18, 0.33, 0.18, braid);                     // nuca
+    b.addBox(-0.19, 0.04, -0.05, -0.17, 0.33, 0.1, braid);                   // laterais
+    b.addBox(0.17, 0.04, -0.05, 0.19, 0.33, 0.1, braid);
+    for (let k = 0; k < 6; k++) {                                              // trancas
+      const x = -0.15 + k * 0.06;
+      b.addBox(x, -0.2 - (k % 2) * 0.05, 0.14, x + 0.035, 0.3, 0.2, k % 2 ? dk : braid);
+    }
+    b.addBox(-0.175, 0.16, -0.18, -0.15, 0.2, -0.17, C('#2b1a12'));         // tatuagem no rosto
+    b.addBox(-0.19, 0.12, 0.0, -0.175, 0.16, 0.04, C('#d8dde3'));            // brinco
+    return b.build();
+  }
   if (o.hat === 'cap') {
     b.addBox(-0.18, 0.31, -0.18, 0.18, 0.42, 0.18, C(o.hatColor));
     b.addBox(-0.18, 0.31, -0.3, 0.18, 0.34, -0.18, C(o.hatColor));
@@ -130,17 +167,51 @@ function headGeo(o) {
   }
   return b.build();
 }
-const upperArmGeo = (o) => { const b = new GeomBuilder(); b.addBox(-0.075, -0.30, -0.085, 0.075, 0.06, 0.085, C(o.shirt)); return b.build(); };
+const upperArmGeo = (o) => {
+  const b = new GeomBuilder();
+  b.addBox(-0.075, -0.30, -0.085, 0.075, 0.06, 0.085, C(o.shirt));
+  if (o.style === 'rapper') {
+    const ink = C('#2b1a12');
+    b.addBox(-0.077, -0.24, -0.06, 0.077, -0.12, 0.06, ink);
+    b.addBox(-0.077, -0.06, -0.04, 0.077, 0.03, 0.05, ink);
+  }
+  return b.build();
+};
 const foreArmGeo = (o) => {
   const b = new GeomBuilder();
   b.addBox(-0.065, -0.30, -0.075, 0.065, 0.0, 0.075, C(o.skin));
   b.addBox(-0.07, -0.34, -0.08, 0.07, -0.28, 0.08, C(o.skin).multiplyScalar(0.92));
+  if (o.style === 'rapper') {
+    const ink = C('#2b1a12');
+    b.addBox(-0.067, -0.22, -0.077, 0.067, -0.1, 0.077, ink);
+    b.addBox(-0.072, -0.35, -0.04, 0.072, -0.33, 0.04, C('#d8dde3'));   // anel
+  }
   return b.build();
 };
-const thighGeo = (o) => { const b = new GeomBuilder(); b.addBox(-0.1, -0.42, -0.11, 0.1, 0.0, 0.11, C(o.pants)); return b.build(); };
+const thighGeo = (o) => {
+  const b = new GeomBuilder();
+  b.addBox(-0.1, -0.42, -0.11, 0.1, 0.0, 0.11, C(o.pants));
+  if (o.style === 'rapper') {
+    const dk = C(o.pants).multiplyScalar(0.8);
+    b.addBox(-0.11, -0.26, -0.06, -0.1, -0.1, 0.06, dk);        // bolso lateral
+    b.addBox(0.1, -0.26, -0.06, 0.12, -0.1, 0.06, dk);
+    b.addBox(-0.08, -0.12, -0.115, 0.08, -0.04, -0.11, dk);      // bolso frontal
+  }
+  return b.build();
+};
 const shinGeo = (o) => {
   const b = new GeomBuilder();
   b.addBox(-0.095, -0.30, -0.1, 0.095, 0.0, 0.1, C(o.pants));
+  if (o.style === 'rapper') {
+    const dk = C(o.pants).multiplyScalar(0.75);
+    b.addBox(-0.105, -0.2, -0.105, 0.105, -0.14, 0.105, dk);     // tira da perna
+    b.addBox(-0.105, -0.12, -0.105, 0.105, -0.07, 0.105, dk);
+    b.addBox(-0.1, -0.38, -0.17, 0.1, -0.3, 0.11, C('#f1efe9'));  // tenis branco
+    b.addBox(-0.1, -0.38, -0.17, 0.1, -0.35, 0.11, C('#d8d4cb'));  // sola
+    b.addBox(-0.102, -0.34, -0.06, 0.102, -0.3, 0.11, C('#6b4a33')); // cano marrom
+    b.addBox(-0.102, -0.36, -0.17, 0.102, -0.3, -0.1, C('#6b4a33'));
+    return b.build();
+  }
   b.addBox(-0.105, -0.38, -0.15, 0.105, -0.30, 0.11, C('#2a2a30'));
   return b.build();
 };

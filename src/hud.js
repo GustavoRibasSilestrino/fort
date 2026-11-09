@@ -1,3 +1,4 @@
+import { NET } from './net.js';
 import { WEAPONS, RARITY, CONSUMABLES, MATS, AMMO } from './config.js';
 import { player, ps } from './player.js';
 import { S } from './state.js';
@@ -151,7 +152,7 @@ export function showHud(v) { els.hud.classList.toggle('hidden', !v); }
 export function showEnd({ victory, score, time }) {
   $('endTitle').textContent = victory ? 'VITÓRIA!' : 'DERROTA';
   $('endTitle').className = victory ? 'win' : 'lose';
-  $('endSub').textContent = victory ? 'Você venceu o duelo!' : 'O bot venceu desta vez. Treine mais no Freebuild!';
+  $('endSub').textContent = NET.inMatch || S.duel.online ? (victory ? 'Você venceu o x1!' : 'Seu amigo venceu desta vez!') : (victory ? 'Você venceu o duelo!' : 'O bot venceu desta vez. Treine mais no Freebuild!');
   $('endPlace').textContent = `${score[0]} x ${score[1]}`;
   $('endKills').textContent = score[0];
   $('endTime').textContent = fmtTime(time);

@@ -15,6 +15,7 @@ import { initInput, requestLock, endFrame, input, keys, pressed, mouse } from '.
 import { initAudio, sfx, resumeAudio } from './audio.js';
 import { loadSettings, saveSettings, initSettingsUI } from './settings.js';
 import { on } from './events.js';
+import { NET, joinLobby, leaveLobby, invite, answerInvite } from './net.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
@@ -90,14 +91,15 @@ async function init() {
   requestAnimationFrame(frame);
 }
 
-function startGame(type) {
+function startGame(type, online = false) {
   if (!ready || running) return;
   S.settings.diff = $('diffIn').value;
   saveSettings();
   initAudio(S.settings.volume);
   $('menu').classList.add('hidden');
+  $('lobby').classList.add('hidden'); $('inviteBox').classList.add('hidden');
   showHud(true);
-  startMode(type, S.settings.diff);
+  startMode(type, S.settings.diff, online);
   S.paused = false;
   running = true;
   if (!S.noLock) {
@@ -137,6 +139,33 @@ function frame(now) {
 }
 
 $('freeBtn').addEventListener('click', () => startGame('freebuild'));
+// ===== X1 online =====
+let pendingInvite = null;
+function renderPeers() {
+  const box = $('peerList'); box.innerHTML = '';
+  if (!NET.room) return;
+  if (NET.peers.size === 0) { box.innerHTML = '<div class="snote">Ninguém online ainda nesta sala... peça para seu amigo entrar com o mesmo código.</div>'; return; }
+  for (const [id, p] of NET.peers) {
+    const row = document.createElement('div'); row.className = 'peer' + (p.busy ? ' busy' : '');
+    row.innerHTML = '<span></span>'; row.firstChild.textContent = p.name;
+    const small = document.createElement('small'); small.textContent = p.busy ? 'em partida' : 'online'; row.firstChild.appendChild(small);
+    if (!p.busy) { const b = document.createElement('button'); b.className = 'btn small'; b.textContent = 'CONVIDAR X1'; b.onclick = () => invite(id); row.appendChild(b); }
+    box.appendChild(row);
+  }
+}
+NET.onLobby = renderPeers;
+NET.onInvite = (id, name) => { pendingInvite = id; $('inviteTxt').textContent = `${name} te convidou para um X1!`; $('inviteBox').classList.remove('hidden'); };
+NET.onStart = () => startGame('duel', true);
+$('onlineBtn').addEventListener('click', () => { $('netName').value = S.settings.name && S.settings.name !== 'Jogador' ? S.settings.name : ($('netName').value || ''); $('lobby').classList.remove('hidden'); });
+$('netClose').addEventListener('click', () => { leaveLobby(); $('lobby').classList.add('hidden'); $('inviteBox').classList.add('hidden'); });
+$('netJoin').addEventListener('click', () => {
+  const name = ($('netName').value || 'Jogador').trim().slice(0, 14) || 'Jogador';
+  saveSettings();
+  try { joinLobby($('netLobby').value, name); $('netStatus').textContent = 'Online na sala "' + NET.lobby + '". Procurando amigos...'; renderPeers(); }
+  catch (e) { $('netStatus').textContent = 'Erro ao conectar: ' + (e && e.message ? e.message : e); }
+});
+$('invYes').addEventListener('click', () => { if (pendingInvite) answerInvite(pendingInvite, true); pendingInvite = null; $('inviteBox').classList.add('hidden'); });
+$('invNo').addEventListener('click', () => { if (pendingInvite) answerInvite(pendingInvite, false); pendingInvite = null; $('inviteBox').classList.add('hidden'); });
 $('duelBtn').addEventListener('click', () => startGame('duel'));
 $('resumeBtn').addEventListener('click', () => requestLock(canvas));
 $('pause').addEventListener('click', (e) => { if (e.target.id === 'pause') requestLock(canvas); });
