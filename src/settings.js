@@ -12,7 +12,7 @@ const $ = (id) => document.getElementById(id);
 export function loadSettings() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) { saved = {}; }
-  if (saved.v !== 3) { delete saved.camDist; saved.v = 3; }
+  if (saved.v !== 4) { delete saved.camDist; saved.editConfirm = 'auto'; saved.v = 4; }
   Object.assign(S.settings, DEFAULTS, saved);
   loadBinds();
 }

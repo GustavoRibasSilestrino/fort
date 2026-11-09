@@ -392,12 +392,12 @@ function buildLogic(dt) {
   ps.buildCd -= dt;
   S.camera.getWorldDirection(_f);
   let t = buildTargetAim(p, S.camera.position, _f, ps.camYaw, ps.buildType, ps.buildMat);
-  if (pieceExists(t) || !canPlace(t, p)) {
-    const sn = findSnap(ps.buildType, p, S.camera.position, _f, ps.buildMat, t.dir);
+  if (pieceExists(t) || !canPlace(t, p, ps.camYaw)) {
+    const sn = findSnap(ps.buildType, p, S.camera.position, _f, ps.buildMat, t.dir, ps.camYaw);
     if (sn) t = sn;
   }
   const cost = 10;
-    ps.buildValid = !pieceExists(t) && canPlace(t, p) && (S.infMats || inv.mats[ps.buildMat] >= cost);
+    ps.buildValid = !pieceExists(t) && canPlace(t, p, ps.camYaw) && (S.infMats || inv.mats[ps.buildMat] >= cost);
   ps.buildTarget = t;
   ensureGhost();
   const key = `${t.type}|${t.axis || ''}|${t.i}|${t.j}|${Math.round(t.y * 4)}|${t.dir ?? ''}`;

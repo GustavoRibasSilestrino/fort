@@ -298,7 +298,12 @@ const colKey = (i, j) => i + ',' + j;
 export function pieceKey(o) {
   return `${o.type}|${o.axis || ''}|${o.i}|${o.j}|${Math.round(o.y * 4)}|${o.dir ?? ''}`;
 }
-export function pieceExists(o) { return byKey.has(pieceKey(o)); }
+// "chunk": 1 peca por espaco. Parede = uma por borda/nivel; piso, escada e cone dividem o mesmo espaco da celula/nivel.
+export function slotKey(o) {
+  return o.type === 'wall' ? `w|${o.axis}|${o.i}|${o.j}|${Math.round(o.y * 4)}` : `f|${o.i}|${o.j}|${Math.round(o.y * 4)}`;
+}
+const bySlot = new Map();
+export function pieceExists(o) { return byKey.has(pieceKey(o)) || bySlot.has(slotKey(o)); }
 export function pieceAt(o) { return byKey.get(pieceKey(o)) || null; }
 
 function makeColliders(p) {
@@ -336,8 +341,10 @@ export function createPiece(o) {
   if (!o.trim) o.trim = new THREE.Color(mat ? mat.trim || mat.color : '#999999');
   const p = new Piece(o);
   p.key = pieceKey(p);
-  if (byKey.has(p.key)) return null;
+  p.slot = slotKey(p);
+  if (byKey.has(p.key) || bySlot.has(p.slot)) return null;
   byKey.set(p.key, p);
+  bySlot.set(p.slot, p);
   allPieces.add(p);
   const ck = colKey(p.i, p.j);
   let set = cols.get(ck);
@@ -369,6 +376,7 @@ export function destroyPiece(p, silent = false) {
   for (const c of p.colliders) removeCollider(c);
   allPieces.delete(p);
   byKey.delete(p.key);
+  if (bySlot.get(p.slot) === p) bySlot.delete(p.slot);
   const set = cols.get(colKey(p.i, p.j));
   if (set) set.delete(p);
   if (p.mesh) { S.scene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh = null; }
@@ -419,6 +427,15 @@ function aabbOf(o) {
 }
 // Regra de construcao: so pode colocar uma peca encostada em outra ja existente.
 // A primeira peca (sem vizinhas) so pode ser no chao, ao lado de onde o jogador esta.
+// so vale construir na frente e nos lados (nao atras): sem girar 360
+function inFront(t, a, yaw) {
+  const bx = aabbOf(t);
+  const cx = (bx[0] + bx[3]) / 2 - a.x, cz = (bx[2] + bx[5]) / 2 - a.z;
+  const d = Math.hypot(cx, cz);
+  if (d < G * 0.75) return true;
+  const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
+  return (cx * fx + cz * fz) / d > -0.17;
+}
 // escada: so as pontas (embaixo e em cima) conectam; as outras pecas usam a caixa inteira
 function connBoxes(o) {
   if (o.type !== 'ramp') return [aabbOf(o)];
@@ -431,7 +448,8 @@ function connBoxes(o) {
   }
 }
 const boxHit = (b, q, e) => b[0] - e <= q[3] && b[3] + e >= q[0] && b[1] - e <= q[4] && b[4] + e >= q[1] && b[2] - e <= q[5] && b[5] + e >= q[2];
-export function canPlace(t, a) {
+export function canPlace(t, a, yaw) {
+  if (yaw !== undefined && !inFront(t, a, yaw)) return false;
   const tb = connBoxes(t), e = 0.2;
   if (t.type === 'floor' || t.type === 'roof') {   // nao vale piso/cone em cima da propria escada
     for (const p of allPieces) if (p.type === 'ramp' && p.i === t.i && p.j === t.j && t.y > p.y + 0.5) return false;
@@ -447,7 +465,7 @@ export function canPlace(t, a) {
 
 // Se o alvo da mira nao encaixa em nenhuma peca, procura o encaixe valido mais proximo da mira
 // (ex.: olhando para o ceu, o piso vai para a ponta da escada).
-export function findSnap(type, a, cam, dir, mat, prefDir) {
+export function findSnap(type, a, cam, dir, mat, prefDir, yaw) {
   const near = [];
   for (const p of allPieces) {
     const c = p.center();
@@ -498,7 +516,7 @@ export function findSnap(type, a, cam, dir, mat, prefDir) {
       for (const p of near) if (p.type === 'ramp' && p.i === o.i && p.j === o.j && o.y > p.y + 0.5) { over = true; break; }
       if (over) continue;
     }
-    if (!pieceExists(o) && canPlace(o, a)) return o;
+    if (!pieceExists(o) && canPlace(o, a, yaw)) return o;
   }
   return null;
 }

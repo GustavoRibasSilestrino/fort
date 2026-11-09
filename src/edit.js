@@ -158,9 +158,7 @@ export function updateEdit(dt = 0.016) {
   for (let i = 0; i < tiles.length; i++) tiles[i].material = i === h ? MATS.hover : E.mask[i] ? MATS.on : MATS.off;
   // modo automatico: ao soltar o clique depois de alterar, aplica logo em seguida (uma folga curta permite redefinir com o scroll)
   if (mode === 'auto') {
-    if (mouse.l) E.autoT = 0;
-    else if (E.wasDown && E.dirty) E.autoT = 0.3;
-    if (E.autoT > 0) { E.autoT -= dt; if (E.autoT <= 0) { endEdit(true); return; } }
+    if (!mouse.l && E.wasDown && E.dirty) { endEdit(true); return; }   // instantaneo: aplica assim que solta o clique
   }
   E.wasDown = mouse.l;
 }
