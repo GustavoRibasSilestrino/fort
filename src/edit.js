@@ -21,6 +21,9 @@ const MATS = {
   hover: new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthTest: false, depthWrite: false }),
 };
 
+// piso/cone: quadrados com teste de profundidade, entao so aparecem vistos por baixo
+const MATSD = {};
+for (const k of Object.keys(MATS)) { MATSD[k] = MATS[k].clone(); MATSD[k].depthTest = true; }
 export function isEditing() { return E.active; }
 
 function quad(p00, p10, p11, p01) {
@@ -62,12 +65,12 @@ function buildTiles() {
         }
       } else if (p.type === 'floor') {
         m = new THREE.Mesh(new THREE.PlaneGeometry(tw - 0.1, th - 0.1), MATS.on);
-        m.rotation.x = -Math.PI / 2;
-        m.position.set(p.i * G + (c + 0.5) * tw, p.y + 0.07, p.j * G + (r + 0.5) * th);
+        m.rotation.x = Math.PI / 2;
+        m.position.set(p.i * G + (c + 0.5) * tw, p.y - 0.42, p.j * G + (r + 0.5) * th);   // quadrados de edicao so por baixo
       } else if (p.type === 'roof') {
         m = new THREE.Mesh(new THREE.PlaneGeometry(tw - 0.1, th - 0.1), MATS.on);
         m.rotation.x = -Math.PI / 2;
-        m.position.set(p.i * G + (c + 0.5) * tw, p.y + ROOF_PEAK * 0.62, p.j * G + (r + 0.5) * th);
+        m.position.set(p.i * G + (c + 0.5) * tw, p.y - 0.34, p.j * G + (r + 0.5) * th);
       } else { // escada: quadrados inclinados sobre os degraus
         const ua = r * th + gap, ub = (r + 1) * th - gap, va = c * tw + gap, vb = (c + 1) * tw - gap;
         m = new THREE.Mesh(quad(stairPoint(p, ua, va, 0.12), stairPoint(p, ub, va, 0.12), stairPoint(p, ub, vb, 0.12), stairPoint(p, ua, vb, 0.12)), MATS.on);
@@ -118,7 +121,7 @@ function hoverTile() {
     else { if (Math.abs(_d.x) < 1e-5) return -1; t = (p.i * G - o.x) / _d.x; if (t < 0 || t > 40) return -1; a = o.z + _d.z * t - p.j * G; b = o.y + _d.y * t - p.y; }
     col = Math.floor(a / (G / nc)); row = Math.floor(b / wh);
   } else if (p.type === 'floor' || p.type === 'roof') {
-    const py = p.type === 'floor' ? p.y : p.y + ROOF_PEAK * 0.62;
+    const py = p.type === 'floor' ? p.y - 0.42 : p.y - 0.34;
     if (Math.abs(_d.y) < 1e-5) return -1;
     t = (py - o.y) / _d.y; if (t < 0 || t > 40) return -1;
     col = Math.floor((o.x + _d.x * t - p.i * G) / (G / nc)); row = Math.floor((o.z + _d.z * t - p.j * G) / (G / nr));
@@ -155,7 +158,8 @@ export function updateEdit(dt = 0.016) {
   }
   if (!mouse.l) E.paint = null;
   E.hover = h;
-  for (let i = 0; i < tiles.length; i++) tiles[i].material = i === h ? MATS.hover : E.mask[i] ? MATS.on : MATS.off;
+  const MS = E.piece.type === 'floor' || E.piece.type === 'roof' ? MATSD : MATS;
+  for (let i = 0; i < tiles.length; i++) tiles[i].material = i === h ? MS.hover : E.mask[i] ? MS.on : MS.off;
   // modo automatico: ao soltar o clique depois de alterar, aplica logo em seguida (uma folga curta permite redefinir com o scroll)
   if (mode === 'auto') {
     if (!mouse.l && E.wasDown && E.dirty) { endEdit(true); return; }   // instantaneo: aplica assim que solta o clique

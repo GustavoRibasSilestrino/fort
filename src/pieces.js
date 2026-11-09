@@ -15,7 +15,7 @@ export const hooks = { onDestroy: null };
 export const T = 0.3;          // espessura da colisao de parede/piso
 const BW = 0.18;               // largura das vigas da moldura
 export const TYPES = ['wall', 'floor', 'ramp', 'roof'];
-export const GRID = { wall: [3, 3], floor: [3, 3], ramp: [2, 2], roof: [3, 3] }; // [colunas, linhas]
+export const GRID = { wall: [3, 3], floor: [2, 2], ramp: [2, 2], roof: [2, 2] }; // [colunas, linhas]
 export const isPiece = (o) => !!o && TYPES.includes(o.type) && !!o.colliders;
 export const FULL_MASK = (type = 'wall') => new Array(GRID[type][0] * GRID[type][1]).fill(true);
 
@@ -97,8 +97,9 @@ export class Piece {
         else out.push([this.i * G - T / 2, y0, this.j * G + a0, this.i * G + T / 2, y1, this.j * G + a1]);
       }
     } else if (this.type === 'floor') {
-      for (const r of maskRects(this.mask, 3, 3)) {
-        out.push([this.i * G + r.c0 * tw, this.y - T - sk, this.j * G + r.r0 * tw, this.i * G + (r.c1 + 1) * tw, this.y, this.j * G + (r.r1 + 1) * tw]);
+      const fw = G / 2;
+      for (const r of maskRects(this.mask, 2, 2)) {
+        out.push([this.i * G + r.c0 * fw, this.y - T - sk, this.j * G + r.r0 * fw, this.i * G + (r.c1 + 1) * fw, this.y, this.j * G + (r.r1 + 1) * fw]);
       }
     }
     return out;
@@ -172,10 +173,10 @@ export class Piece {
   }
 
   fillFloor(b) {
-    const tw = G / 3, m = this.mask, c = this.color, tr = this.trim;
+    const tw = G / 2, m = this.mask, c = this.color, tr = this.trim;
     const sk = this.skirt || 0;
     const x0 = this.i * G, z0 = this.j * G;
-    for (const r of maskRects(m, 3, 3)) {
+    for (const r of maskRects(m, 2, 2)) {
       // tabuas (estilo "plastico"): faixas com cor levemente diferente e frestas finas
       const xa = x0 + r.c0 * tw, xb = x0 + (r.c1 + 1) * tw, za = z0 + r.r0 * tw, zb = z0 + (r.r1 + 1) * tw;
       const wood = this.mat === 'wood';
@@ -187,7 +188,7 @@ export class Piece {
       }
     }
     const dn = this.y - T - 0.2 - sk;
-    for (const e of edgeBeams(m, 3, 3)) {
+    for (const e of edgeBeams(m, 2, 2)) {
       if (e.kind === 'h') {
         const za = e.side > 0 ? z0 + e.line * tw : z0 + e.line * tw - BW, zb = e.side > 0 ? z0 + e.line * tw + BW : z0 + e.line * tw;
         b.addBox(x0 + e.i0 * tw, dn, za, x0 + (e.i1 + 1) * tw, this.y, zb, tr, tr);
@@ -259,12 +260,12 @@ export class Piece {
       return;
     }
     // editado: telhado feito tile a tile
-    const hh = G / 2, tw = G / 3;
+    const hh = G / 2, tw = G / 2;
     const surf = (x, z) => yb + ROOF_PEAK * (1 - Math.min(Math.max(Math.abs(x - cx), Math.abs(z - cz)), hh) / hh);
     const out = [cx, yb + 0.2, cz];
-    for (let r = 0; r < 3; r++) {
-      for (let cc = 0; cc < 3; cc++) {
-        if (!this.mask[r * 3 + cc]) continue;
+    for (let r = 0; r < 2; r++) {
+      for (let cc = 0; cc < 2; cc++) {
+        if (!this.mask[r * 2 + cc]) continue;
         const xa = x0 + cc * tw, xb = xa + tw, za = z0 + r * tw, zb = za + tw, xm = (xa + xb) / 2, zm = (za + zb) / 2;
         const A = [xa, surf(xa, za), za], B = [xb, surf(xb, za), za], C = [xb, surf(xb, zb), zb], D = [xa, surf(xa, zb), zb], M = [xm, surf(xm, zm), zm];
         const tri = (p, q, s, col) => {
@@ -275,7 +276,7 @@ export class Piece {
         tri(A, B, M, shade); tri(B, C, M, shade); tri(C, D, M, shade); tri(D, A, M, shade);
       }
     }
-    for (const e of edgeBeams(this.mask, 3, 3)) {
+    for (const e of edgeBeams(this.mask, 2, 2)) {
       if (e.kind === 'h') {
         const za = z0 + e.line * tw;
         const xa = x0 + e.i0 * tw, xb = x0 + (e.i1 + 1) * tw;
@@ -432,7 +433,7 @@ function inFront(t, a, yaw) {
   const bx = aabbOf(t);
   const cx = (bx[0] + bx[3]) / 2 - a.x, cz = (bx[2] + bx[5]) / 2 - a.z;
   const d = Math.hypot(cx, cz);
-  if (d < G * 0.75) return true;
+  if (d < 1.0) return true;
   const fx = -Math.sin(yaw), fz = -Math.cos(yaw);
   return (cx * fx + cz * fz) / d > -0.17;
 }
@@ -451,13 +452,37 @@ const boxHit = (b, q, e) => b[0] - e <= q[3] && b[3] + e >= q[0] && b[1] - e <= 
 export function canPlace(t, a, yaw) {
   if (yaw !== undefined && !inFront(t, a, yaw)) return false;
   const tb = connBoxes(t), e = 0.2;
-  if (t.type === 'floor' || t.type === 'roof') {   // nao vale piso/cone em cima da propria escada
-    for (const p of allPieces) if (p.type === 'ramp' && p.i === t.i && p.j === t.j && t.y > p.y + 0.5) return false;
+  const pci = Math.floor(a.x / G), pcj = Math.floor(a.z / G);
+  // camada: so na mesma altura do jogador (ou um andar acima se empilhando / continuando a escada)
+  const lvl = Math.floor((a.y + 0.4) / H) * H;
+  if (t.type === 'wall') {
+    const same = Math.abs(t.y - lvl) < 0.3;
+    const stack = Math.abs(t.y - (lvl + H)) < 0.3 && bySlot.has(slotKey({ type: 'wall', axis: t.axis, i: t.i, j: t.j, y: t.y - H }));
+    if (!same && !stack) return false;
+  } else if (t.y < lvl - 0.3 || t.y > lvl + H + 0.3) return false;
+  // alcance: apenas 1 chunk (celula) ao redor de onde o jogador esta
+  const cells = t.type === 'wall' ? (t.axis === 'x' ? [[t.i, t.j - 1], [t.i, t.j]] : [[t.i - 1, t.j], [t.i, t.j]]) : [[t.i, t.j]];
+  if (!cells.some(([ci, cj]) => Math.abs(ci - pci) <= 1 && Math.abs(cj - pcj) <= 1)) return false;
+  for (const p of allPieces) {
+    if (t.type === 'ramp' && p.type === 'wall' && Math.abs(p.y - t.y) < 0.5) {   // nao fechar a propria escada
+      const ends = t.dir === 0 || t.dir === 2 ? p.axis === 'z' && p.j === t.j && (p.i === t.i || p.i === t.i + 1) : p.axis === 'x' && p.i === t.i && (p.j === t.j || p.j === t.j + 1);
+      if (ends) return false;
+    }
+    if (p.type === 'ramp' && Math.abs(p.y - t.y) < 0.5) {
+      // parede nao pode fechar as pontas da escada
+      if (t.type === 'wall') {
+        const ends = p.dir === 0 || p.dir === 2 ? t.axis === 'z' && t.j === p.j && (t.i === p.i || t.i === p.i + 1) : t.axis === 'x' && t.i === p.i && (t.j === p.j || t.j === p.j + 1);
+        if (ends) return false;
+      }
+    }
+    // piso/cone em cima da escada: so quando o jogador esta subindo nela
+    if ((t.type === 'floor' || t.type === 'roof') && p.type === 'ramp' && p.i === t.i && p.j === t.j && t.y > p.y + 0.5) {
+      if (!(pci === p.i && pcj === p.j && a.y > p.y + 0.3)) return false;
+    }
   }
   for (const p of allPieces) {
     for (const q of connBoxes(p)) for (const b of tb) if (boxHit(b, q, e)) return true;
   }
-  const pci = Math.floor(a.x / G), pcj = Math.floor(a.z / G);
   const dci = t.type === 'wall' && t.axis === 'z' ? Math.min(Math.abs(t.i - 1 - pci), Math.abs(t.i - pci)) : Math.abs(t.i - pci);
   const dcj = t.type === 'wall' && t.axis === 'x' ? Math.min(Math.abs(t.j - 1 - pcj), Math.abs(t.j - pcj)) : Math.abs(t.j - pcj);
   return dci <= 1 && dcj <= 1 && Math.abs(t.y - a.y) < 0.8;
@@ -511,11 +536,6 @@ export function findSnap(type, a, cam, dir, mat, prefDir, yaw) {
   cands.sort((p, q) => p.score - q.score);
   for (const o of cands) {
     if (o.score > 60) break;
-    if (type === 'floor' || type === 'roof') {   // nao vale piso/cone em cima da propria escada
-      let over = false;
-      for (const p of near) if (p.type === 'ramp' && p.i === o.i && p.j === o.j && o.y > p.y + 0.5) { over = true; break; }
-      if (over) continue;
-    }
     if (!pieceExists(o) && canPlace(o, a, yaw)) return o;
   }
   return null;
