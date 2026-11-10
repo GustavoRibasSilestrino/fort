@@ -153,7 +153,11 @@ function resolveHoriz(a) {
         // escada/cone: laje fina; da para passar por baixo se houver altura
         const s = slabSurface(c, px, pz);
         if (s <= feet + STEP) continue;
-        if (s - c.th >= head - 0.05) continue;
+        // cone: usa a altura que o ator TERIA nesta posicao (subindo a escada a cabeca sobe junto; descendo, abaixa).
+        // Assim ele para antes de bater a cabeca e sempre consegue recuar.
+        let hd = head;
+        if (c.kind === 2 && a.grounded) { const g2 = supportAt(a.x, a.z, a.y + STEP); if (g2 >= a.y - SNAP) hd = g2 + a.height; }
+        if (s - c.th >= hd - 0.05) continue;
       }
       if (d2 > 1e-9) {
         const d = Math.sqrt(d2);
@@ -161,6 +165,11 @@ function resolveHoriz(a) {
         a.x += dx * pen; a.z += dz * pen;
       } else if (c.kind === 1 && stairsPushUp(a, c, head)) {
         // embaixo da escada, sem altura: empurra so ate onde a cabeca cabe (nao joga o jogador para fora)
+      } else if (c.kind === 2) {
+        // cabeca bateria no cone de cima: nao avanca (volta para onde estava) em vez de ser jogado para o lado.
+        // Se nem se moveu (a altura mudou ao subir a escada), apenas fica onde esta.
+        if (a._px !== undefined) { a.x = a._px; a.z = a._pz; }
+        continue;
       } else {
         const l = a.x - c.x0, rt = c.x1 - a.x, f = a.z - c.z0, b = c.z1 - a.z;
         const m = Math.min(l, rt, f, b);
@@ -213,8 +222,8 @@ export function moveActor(a, dt) {
   const lim = worldLimit;
   for (let i = 0; i < n; i++) {
     if (a.vx !== 0 || a.vz !== 0) {
-      a.x += a.vx * sdt; resolveHoriz(a);
-      a.z += a.vz * sdt; resolveHoriz(a);
+      a._px = a.x; a._pz = a.z; a.x += a.vx * sdt; resolveHoriz(a);
+      a._px = a.x; a._pz = a.z; a.z += a.vz * sdt; resolveHoriz(a);
       if (a.x > lim) a.x = lim; else if (a.x < -lim) a.x = -lim;
       if (a.z > lim) a.z = lim; else if (a.z < -lim) a.z = -lim;
     }

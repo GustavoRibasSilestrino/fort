@@ -133,23 +133,31 @@ export function buildTargetRel(a, yaw, pitch, type, mat) {
   // ja existe uma escada na celula da frente?
   let ahead = null;
   for (const p of allPieces) if (p.type === 'ramp' && p.i === fi && p.j === fj && Math.abs(p.y - fwd) < 0.3) { ahead = p; break; }
-  let t;
+  // candidatos em ordem de preferencia: fica o primeiro lugar que ainda nao tem uma peca IGUAL.
+  // Pecas diferentes (piso, escada, cone) podem dividir o mesmo quadrado; iguais vao para a camada de cima.
+  let cands;
   if (type === 'wall') {
     let axis, i, j;
     if (d === 0) { axis = 'z'; i = pci + 1; j = pcj; } else if (d === 2) { axis = 'z'; i = pci; j = pcj; }
     else if (d === 1) { axis = 'x'; i = pci; j = pcj + 1; } else { axis = 'x'; i = pci; j = pcj; }
-    t = { type: 'wall', axis, i, j, y: base };
-    if (pieceExists(t)) t = { ...t, y: base + H };   // ja tem parede: empilha
+    cands = [{ type: 'wall', axis, i, j, y: base }, { type: 'wall', axis, i, j, y: base + H }];
   } else if (type === 'floor') {
-    if (up) t = { type: 'floor', i: pci, j: pcj, y: base + H };
-    else if (ahead && ahead.dir === dd) t = { type: 'floor', i: fi + DX[dd], j: fj + DZ[dd], y: fwd + H };   // patamar no topo da escada da frente
-    else if (ahead) t = { type: 'floor', i: fi, j: fj, y: fwd + H };
-    else t = { type: 'floor', i: fi, j: fj, y: fwd };
+    if (up) cands = [{ type: 'floor', i: pci, j: pcj, y: base + H }];
+    else if (ahead && ahead.dir === dd) cands = [
+      { type: 'floor', i: fi + DX[dd], j: fj + DZ[dd], y: fwd + H },   // patamar no topo da escada da frente
+      { type: 'floor', i: fi, j: fj, y: fwd },                        // embaixo da escada, no mesmo quadrado
+      { type: 'floor', i: fi, j: fj, y: fwd + H },                    // por cima da escada
+    ];
+    else if (ahead) cands = [{ type: 'floor', i: fi, j: fj, y: fwd + H }, { type: 'floor', i: fi, j: fj, y: fwd }];
+    else cands = [{ type: 'floor', i: fi, j: fj, y: fwd }, { type: 'floor', i: fi, j: fj, y: fwd + H }];
   } else if (type === 'roof') {
-    t = up ? { type: 'roof', i: pci, j: pcj, y: base + H } : { type: 'roof', i: fi, j: fj, y: fwd + H };
+    // cone: no mesmo quadrado/camada do piso e da escada da frente; se ja tem cone ali, vai para cima
+    if (up) cands = [{ type: 'roof', i: pci, j: pcj, y: base + H }];
+    else cands = [{ type: 'roof', i: fi, j: fj, y: fwd }, { type: 'roof', i: fi, j: fj, y: fwd + H }];
   } else {
-    t = { type: 'ramp', i: fi, j: fj, dir: dd, y: ahead ? fwd + H : fwd };
+    cands = [{ type: 'ramp', i: fi, j: fj, dir: dd, y: fwd }, { type: 'ramp', i: fi, j: fj, dir: dd, y: fwd + H }];
   }
+  let t = cands.find((c) => !pieceExists(c)) || cands[0];
   t.mat = mat;
   return t;
 }

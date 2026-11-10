@@ -17,6 +17,7 @@ import { initAudio, sfx, resumeAudio } from './audio.js';
 import { loadSettings, saveSettings, initSettingsUI } from './settings.js';
 import { on } from './events.js';
 import { NET, joinLobby, leaveLobby, invite, answerInvite } from './net.js';
+import { startMenuScene, stopMenuScene, updateMenuScene } from './menuscene.js';
 
 const $ = (id) => document.getElementById(id);
 const canvas = $('c');
@@ -41,10 +42,25 @@ function applyQuality(q) {
   }
 }
 
+// dificuldade: botoes segmentados que espelham o <select id="diffIn">
+function syncDiff(v) {
+  $('diffIn').value = v;
+  document.querySelectorAll('#diffSeg button').forEach((b) => {
+    const sel = b.dataset.diff === $('diffIn').value;
+    b.classList.toggle('on', sel);
+    b.setAttribute('aria-checked', sel ? 'true' : 'false');
+  });
+}
+document.querySelectorAll('#diffSeg button').forEach((b) => b.addEventListener('click', () => {
+  syncDiff(b.dataset.diff);
+  S.settings.diff = $('diffIn').value;
+  saveSettings();
+}));
+
 async function init() {
   loadSettings();
   const q = S.settings.quality;
-  $('diffIn').value = S.settings.diff || 'normal';
+  syncDiff(S.settings.diff || 'normal');
 
   renderer = new THREE.WebGLRenderer({ canvas, antialias: q !== 'low', powerPreference: 'high-performance' });
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -89,6 +105,7 @@ async function init() {
   window.__g = { S, player, M, THREE, keys, pressed, mouse, input, scene, camera, pieces, physics, ps, combat };
   const auto = params.get('autostart');
   if (auto) { S.noLock = true; startGame(auto === 'duel' ? 'duel' : 'freebuild'); }
+  else startMenuScene();
   requestAnimationFrame(frame);
 }
 
@@ -97,6 +114,8 @@ function startGame(type, online = false) {
   S.settings.diff = $('diffIn').value;
   saveSettings();
   initAudio(S.settings.volume);
+  stopMenuScene();
+  camera.fov = S.settings.fov || 80; camera.updateProjectionMatrix();
   $('menu').classList.add('hidden');
   $('lobby').classList.add('hidden'); $('inviteBox').classList.add('hidden');
   showHud(true);
@@ -128,6 +147,7 @@ function simulate(dt) {
 }
 // usado nos testes automatizados: avanca a simulacao sem depender do requestAnimationFrame
 window.__step = (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) simulate(dt); };
+window.__menuStep = (n = 1, dt = 1 / 60) => { for (let i = 0; i < n; i++) updateMenuScene(dt); renderer.render(scene, camera); };
 
 function frame(now) {
   requestAnimationFrame(frame);
@@ -137,6 +157,7 @@ function frame(now) {
   const active = running && (input.locked || S.noLock);
   if (active) simulate(dt);
   else if (running) { updateSky(0, camera.position); endFrame(); }
+  else updateMenuScene(dt);
   renderer.render(scene, camera);
 }
 
@@ -176,5 +197,5 @@ $('againBtn').addEventListener('click', () => location.reload());
 
 init().catch((e) => {
   console.error(e);
-  $('loading').innerHTML = '<div style="font-size:22px;padding:20px">Erro ao carregar: ' + (e && e.message ? e.message : e) + '</div>';
+  $('loading').innerHTML = '<div style="font-size:20px;padding:20px;color:#E2E8F0;text-align:center">Erro ao carregar: ' + (e && e.message ? e.message : e) + '</div>';
 });

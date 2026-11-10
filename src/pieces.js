@@ -360,9 +360,12 @@ const colKey = (i, j) => i + ',' + j;
 export function pieceKey(o) {
   return `${o.type}|${o.axis || ''}|${o.i}|${o.j}|${Math.round(o.y * 4)}|${o.dir ?? ''}`;
 }
-// "chunk": 1 peca por espaco. Parede = uma por borda/nivel; piso, escada e cone dividem o mesmo espaco da celula/nivel.
+// Regra do Fortnite: no mesmo quadrado e na mesma camada cabem um piso, uma escada e um cone (um de cada),
+// e em cada borda cabe uma parede. Nunca duas pecas IGUAIS no mesmo lugar (a escada conta uma so, em qualquer direcao).
 export function slotKey(o) {
-  return o.type === 'wall' ? `w|${o.axis}|${o.i}|${o.j}|${Math.round(o.y * 4)}` : `${o.type === 'floor' ? 'f' : 'r'}|${o.i}|${o.j}|${Math.round(o.y * 4)}`;
+  const y = Math.round(o.y * 4);
+  if (o.type === 'wall') return `w|${o.axis}|${o.i}|${o.j}|${y}`;
+  return `${o.type === 'floor' ? 'f' : o.type === 'ramp' ? 's' : 'c'}|${o.i}|${o.j}|${y}`;
 }
 const bySlot = new Map();
 export function pieceExists(o) { return byKey.has(pieceKey(o)) || bySlot.has(slotKey(o)); }

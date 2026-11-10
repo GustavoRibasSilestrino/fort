@@ -75,6 +75,7 @@ const SVG = {
   floor: '<svg viewBox="0 0 48 48"><path d="M24 12L44 24L24 36L4 24Z" fill="rgba(180,235,255,.55)" stroke="#e9fbff" stroke-width="2.5" stroke-linejoin="round"/></svg>',
   ramp: '<svg viewBox="0 0 48 48"><path d="M6 38V30H16V22H26V14H36V6H42V38Z" fill="rgba(180,235,255,.55)" stroke="#e9fbff" stroke-width="2.5" stroke-linejoin="round"/></svg>',
   roof: '<svg viewBox="0 0 48 48"><path d="M24 6L42 32L24 40L6 32Z" fill="rgba(180,235,255,.55)" stroke="#e9fbff" stroke-width="2.5" stroke-linejoin="round"/><path d="M24 6V40M6 32L42 32" stroke="#e9fbff" stroke-width="1.5" fill="none"/></svg>',
+  pick: '<svg viewBox="0 0 48 48" fill="none" stroke-linecap="round"><path d="M13 41L32 15" stroke="#c98f4f" stroke-width="5"/><path d="M19 6Q37 8 44 25" stroke="#e2e8f0" stroke-width="6"/></svg>',
   tools: '<svg viewBox="0 0 48 48"><path d="M10 38L34 14M14 10L38 34" stroke="#e9fbff" stroke-width="4" stroke-linecap="round"/><circle cx="38" cy="10" r="4" fill="#e9fbff"/></svg>',
 };
 const keyLbl = (a) => `<div class="kb">${keyName(binds[a])}</div>`;
@@ -82,10 +83,10 @@ const keyLbl = (a) => `<div class="kb">${keyName(binds[a])}</div>`;
 function slotHtml(i, s, sel) {
   const wrap = (inner) => `<div class="sw ${sel ? 'selw' : ''}">${inner}<div class="kb">${i + 1}</div></div>`;
   if (!s) return wrap(`<div class="slot empty"></div>`);
-  if (s.kind === 'pickaxe') return wrap(`<div class="slot ${sel ? 'sel' : ''}"><span class="ico">⛏</span></div>`);
+  if (s.kind === 'pickaxe') return wrap(`<div class="slot ${sel ? 'sel' : ''}"><span class="ico">${SVG.pick}</span></div>`);
   if (s.kind === 'weapon') {
     const c = RARITY[s.rarity].color;
-    return wrap(`<div class="slot ${sel ? 'sel' : ''}" style="border-color:${c};background:linear-gradient(180deg,rgba(10,10,40,.85),${c}88)"><span style="color:#fff">${SHORT[s.wkey]}</span><span class="c">${s.mag}</span></div>`);
+    return wrap(`<div class="slot ${sel ? 'sel' : ''}" style="border-color:${c};background:linear-gradient(180deg,rgba(15,15,35,.88),${c}88)"><span style="color:#fff">${SHORT[s.wkey]}</span><span class="c">${s.mag}</span></div>`);
   }
   const d = CONSUMABLES[s.ckey];
   return wrap(`<div class="slot ${sel ? 'sel' : ''}" style="border-color:${d.color}"><span style="color:${d.color}">${d.short}</span><span class="c">${s.count}</span></div>`);
@@ -151,7 +152,7 @@ export function updateHud(dt) {
   els.pieceBar.classList.toggle('hidden', !ap);
   if (ap) {
     els.pieceFill.style.width = Math.max(0, Math.min(100, (ap.hp / ap.maxHp) * 100)).toFixed(0) + '%';
-    els.pieceFill.style.background = ap.prog < 1 ? '#f2c230' : '#5fd04b';
+    els.pieceFill.style.background = ap.prog < 1 ? '#FFD23F' : '#4ADE80';
     const lbl = ap.owner === 'player' ? `<b>${keyName(binds.edit)}</b>EDITAR` : '';
     if (lbl !== els.pieceLbl._h) { els.pieceLbl._h = lbl; els.pieceLbl.innerHTML = lbl; }
   }
@@ -161,8 +162,8 @@ export function updateHud(dt) {
   els.score.classList.toggle('hidden', !duel);
   els.hints.classList.toggle('hidden', S.mode !== 'freebuild');
   if (S.mode === 'freebuild') {
-    const k = (a) => `<i>${keyName(binds[a])}</i>`;
-    const html = `<b>FREEBUILD</b><br>${k('buildToggle')} construir &nbsp; ${k('wall')} parede &nbsp; ${k('floor')} piso &nbsp; ${k('stairs')} escada &nbsp; ${k('roof')} cone<br>${k('edit')} editar &nbsp; ${k('material')} material &nbsp; ${k('slide')} deslizar &nbsp; ${k('clearAll')} limpar &nbsp; ${k('dummy')} boneco`;
+    const k = (a, t) => `<span><i>${keyName(binds[a])}</i>${t}</span>`;
+    const html = `<b>FREEBUILD</b><div>${k('buildToggle', 'construir')}${k('wall', 'parede')}${k('floor', 'piso')}${k('stairs', 'escada')}${k('roof', 'cone')}${k('edit', 'editar')}${k('material', 'material')}${k('slide', 'deslizar')}${k('clearAll', 'limpar')}${k('dummy', 'boneco')}</div>`;
     if (html !== els.hints._html) { els.hints._html = html; els.hints.innerHTML = html; }
   }
   if (duel) {
