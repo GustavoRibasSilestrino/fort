@@ -15,7 +15,7 @@ const SHORT = { pistol: 'PISTOLA', smg: 'SUBMET.', ar: 'RIFLE', shotgun: 'ESCOP.
 const _v = new THREE.Vector3();
 
 export function initHud() {
-  for (const id of ['crosshair', 'hitmarker', 'progress', 'progText', 'progBar', 'toasts', 'gain', 'buildHelp', 'shBar', 'shNum', 'hpBar', 'hpNum', 'mats', 'buildBar', 'ammo', 'hotbar', 'fps', 'dmgFlash', 'dmgdir', 'scope', 'hud', 'score', 'scoreMe', 'scoreBot', 'scoreSub', 'hints']) els[id] = $(id);
+  for (const id of ['crosshair', 'hitmarker', 'progress', 'progText', 'progBar', 'toasts', 'gain', 'buildHelp', 'editTip', 'pieceBar', 'pieceFill', 'pieceLbl', 'shBar', 'shNum', 'hpBar', 'hpNum', 'mats', 'buildBar', 'ammo', 'hotbar', 'fps', 'dmgFlash', 'dmgdir', 'scope', 'hud', 'score', 'scoreMe', 'scoreBot', 'scoreSub', 'hints']) els[id] = $(id);
 
   on('hitmarker', ({ head, killed, dmg, x, y, z }) => {
     const h = els.hitmarker;
@@ -133,13 +133,28 @@ export function updateHud(dt) {
 
   const bh = els.buildHelp;
   let bhHtml = '';
-  if (isEditing() && alive) {
-    const mode = S.settings.editConfirm || 'auto';
-    const conf = mode === 'auto' ? '<div class="bp"><b>SOLTAR O CLIQUE</b>aplica</div>' : mode === 'release' ? `<div class="bp"><b>SOLTAR ${keyName(binds.edit)}</b>aplica</div>` : `<div class="bp"><b>${keyName(binds.edit)}</b>confirmar</div>`;
-    bhHtml = `<div class="bp sel">EDITANDO</div><div class="bp"><b>CLIQUE</b>tirar / devolver parte</div>${conf}<div class="bp"><b>${keyName(binds.editReset)}</b>redefinir</div><div class="bp"><b>BOTÃO DIR.</b>cancelar</div>`;
-  }
   if (bhHtml !== bh._html) { bh._html = bhHtml; bh.innerHTML = bhHtml; }
   bh.classList.toggle('hidden', !bhHtml);
+
+  // rotulos perto da mira durante a edicao (CONFIRMAR / REDEFINIR), como no Fortnite
+  let tip = '';
+  if (isEditing() && alive) {
+    const mode = S.settings.editConfirm || 'auto';
+    const ck = mode === 'auto' ? 'SOLTE O CLIQUE' : mode === 'release' ? 'SOLTE ' + keyName(binds.edit) : keyName(binds.edit);
+    tip = `<span><b>${ck}</b>CONFIRMAR</span><span><b>${keyName(binds.editReset)}</b>REDEFINIR</span><span><b>BOTÃO DIR.</b>CANCELAR</span>`;
+  }
+  if (tip !== els.editTip._h) { els.editTip._h = tip; els.editTip.innerHTML = tip; }
+  els.editTip.classList.toggle('hidden', !tip);
+
+  // barra de vida da peca que esta na mira
+  const ap = !isEditing() && alive ? ps.aimPiece : null;
+  els.pieceBar.classList.toggle('hidden', !ap);
+  if (ap) {
+    els.pieceFill.style.width = Math.max(0, Math.min(100, (ap.hp / ap.maxHp) * 100)).toFixed(0) + '%';
+    els.pieceFill.style.background = ap.prog < 1 ? '#f2c230' : '#5fd04b';
+    const lbl = ap.owner === 'player' ? `<b>${keyName(binds.edit)}</b>EDITAR` : '';
+    if (lbl !== els.pieceLbl._h) { els.pieceLbl._h = lbl; els.pieceLbl.innerHTML = lbl; }
+  }
 
   // placar do duelo / dica do freebuild
   const duel = S.mode === 'duel' && S.duel;

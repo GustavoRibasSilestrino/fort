@@ -17,11 +17,23 @@ import { sendMask } from './net.js';
 export const E = { active: false, piece: null, mask: [], hover: -1, paint: null, skip: false, dirty: false, wasDown: false, nc: 3, nr: 3 };
 let group = null, tiles = [];
 const _d = new THREE.Vector3();
+// como no Fortnite: partes que ficam = cinza translucido com um X; partes selecionadas (que saem) = azul
 const MATS = {
-  on: new THREE.MeshBasicMaterial({ color: '#3da5ff', transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthTest: false, depthWrite: false }),
-  off: new THREE.MeshBasicMaterial({ color: '#ff4d5a', transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthTest: false, depthWrite: false }),
-  hover: new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthTest: false, depthWrite: false }),
+  on: new THREE.MeshBasicMaterial({ color: '#aeb4bd', transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthTest: false, depthWrite: false }),
+  off: new THREE.MeshBasicMaterial({ color: '#1f72e8', transparent: true, opacity: 0.84, side: THREE.DoubleSide, depthTest: false, depthWrite: false }),
+  hover: new THREE.MeshBasicMaterial({ color: '#e9eef5', transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthTest: false, depthWrite: false }),
+  hoverOff: new THREE.MeshBasicMaterial({ color: '#5aa6ff', transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthTest: false, depthWrite: false }),
 };
+const LINE = new THREE.LineBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, depthTest: false, depthWrite: false });
+const LINED = LINE.clone(); LINED.depthTest = true;
+// contorno + X de um tile, a partir dos 4 cantos
+function crossLines(a, b, c, d, mat) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.Float32BufferAttribute([...a, ...b, ...b, ...c, ...c, ...d, ...d, ...a, ...a, ...c, ...b, ...d], 3));
+  const l = new THREE.LineSegments(g, mat);
+  l.renderOrder = 10; l.frustumCulled = false;
+  return l;
+}
 
 // piso/cone: quadrados com teste de profundidade, entao so aparecem vistos por baixo
 const MATSD = {};
@@ -79,6 +91,18 @@ function buildTiles() {
       }
       m.renderOrder = 9;
       m.frustumCulled = false;
+      // contorno e X (aparecem nas partes que ficam)
+      const flat = p.type === 'floor' || p.type === 'roof';
+      let ln;
+      if (p.type === 'ramp') {
+        const ua = r * th + gap, ub = (r + 1) * th - gap, va = c * tw + gap, vb = (c + 1) * tw - gap;
+        ln = crossLines(stairPoint(p, ua, va, 0.14), stairPoint(p, ub, va, 0.14), stairPoint(p, ub, vb, 0.14), stairPoint(p, ua, vb, 0.14), LINE);
+      } else {
+        const hw = (tw - 0.1) / 2, hh2 = ((p.type === 'wall' ? H / nr : th) - 0.1) / 2;
+        ln = crossLines([-hw, -hh2, 0], [hw, -hh2, 0], [hw, hh2, 0], [-hw, hh2, 0], flat ? LINED : LINE);
+      }
+      m.add(ln);
+      m.userData.x = ln;
       group.add(m);
       tiles.push(m);
     }
@@ -86,7 +110,7 @@ function buildTiles() {
   S.scene.add(group);
 }
 function clearTiles() {
-  if (group) { S.scene.remove(group); group.children.forEach((m) => { if (m.geometry) m.geometry.dispose(); }); group = null; tiles = []; }
+  if (group) { S.scene.remove(group); group.traverse((m) => { if (m.geometry) m.geometry.dispose(); }); group = null; tiles = []; }
 }
 
 export function startEdit() {
@@ -166,7 +190,10 @@ export function updateEdit(dt = 0.016) {
   if (!mouse.l) E.paint = null;
   E.hover = h;
   const MS = E.piece.type === 'floor' || E.piece.type === 'roof' ? MATSD : MATS;
-  for (let i = 0; i < tiles.length; i++) tiles[i].material = i === h ? MS.hover : E.mask[i] ? MS.on : MS.off;
+  for (let i = 0; i < tiles.length; i++) {
+    tiles[i].material = E.mask[i] ? (i === h ? MS.hover : MS.on) : (i === h ? MS.hoverOff : MS.off);
+    tiles[i].userData.x.visible = E.mask[i];
+  }
   // modo automatico: ao soltar o clique depois de alterar, aplica logo em seguida (uma folga curta permite redefinir com o scroll)
   if (mode === 'auto') {
     if (!mouse.l && E.wasDown && E.dirty) { endEdit(true); return; }   // instantaneo: aplica assim que solta o clique

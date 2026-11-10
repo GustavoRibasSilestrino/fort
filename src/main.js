@@ -3,6 +3,7 @@ import { S } from './state.js';
 import { buildGround } from './terrain.js';
 import { buildSky, updateSky } from './sky.js';
 import * as pieces from './pieces.js';
+import { updatePieces } from './pieces.js';
 import * as physics from './physics.js';
 import * as combat from './combat.js';
 import { initFx, updateFx } from './fx.js';
@@ -119,6 +120,7 @@ function simulate(dt) {
   updatePlayer(dt);
   updateMode(dt);
   updateRockets(dt);
+  updatePieces(dt);
   updateFx(dt);
   updateSky(dt, camera.position);
   updateHud(dt);

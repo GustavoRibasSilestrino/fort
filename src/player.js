@@ -373,8 +373,8 @@ function weaponLogic(dt) {
 let ghost = null, ghostKey = '', ghostOk, ghostBad;
 function ensureGhost() {
   if (ghost) return;
-  ghostOk = new THREE.MeshBasicMaterial({ color: '#4dff88', transparent: true, opacity: 0.4, depthWrite: false, side: THREE.DoubleSide });
-  ghostBad = new THREE.MeshBasicMaterial({ color: '#ff4d4d', transparent: true, opacity: 0.4, depthWrite: false, side: THREE.DoubleSide });
+  ghostOk = new THREE.MeshBasicMaterial({ color: '#58b4ff', transparent: true, opacity: 0.42, depthWrite: false, side: THREE.DoubleSide });   // previa azul, como a planta do Fortnite
+  ghostBad = new THREE.MeshBasicMaterial({ color: '#ff4d4d', transparent: true, opacity: 0.36, depthWrite: false, side: THREE.DoubleSide });
   ghost = new THREE.Mesh(new THREE.BufferGeometry(), ghostOk);
   ghost.frustumCulled = false;
   ghost.renderOrder = 8;
@@ -400,7 +400,7 @@ function buildLogic(dt) {
   ghost.visible = true;
   ghost.material = ps.buildValid ? ghostOk : ghostBad;
   if (mouse.l && ps.buildCd <= 0) {
-    ps.buildCd = 0.09;
+    ps.buildCd = 0.05;   // construcao turbo: segurar o clique coloca uma peca atras da outra
     if (ps.buildValid) {
       const piece = placePiece(t, 'player');
       if (piece) {
@@ -440,6 +440,7 @@ function syncModel(dt) {
   else if (s && s.kind === 'weapon') { hk = s.wkey; hr = s.rarity; }
   else hk = 'pickaxe';
   m.hold(hk, hr);
+  m.setBuild(ps.buildMode || isEditing());
   const hv = Math.hypot(p.vx, p.vz);
   const vfwd = p.vx * -Math.sin(p.yaw) + p.vz * -Math.cos(p.yaw);
   m.animate(dt, {
@@ -478,6 +479,14 @@ export function updatePlayer(dt) {
     p.weapon = s && s.kind === 'weapon' ? s : null;
   } else { ps.aiming = false; }
   if (p.god) p.hp = 100;
+  // peca que esta na mira (para a barrinha de vida e a dica de editar)
+  {
+    S.camera.getWorldDirection(_f);
+    const cp = S.camera.position;
+    const r = raycast(cp.x, cp.y, cp.z, _f.x, _f.y, _f.z, 22);
+    const o = r && r.c && r.c.owner;
+    ps.aimPiece = isPiece(o) && !o.dead ? o : null;
+  }
   // abertura da mira: cresce com o disparo, movimento e pulo
   const moveSp = Math.hypot(p.vx, p.vz);
   let spT = ps.bloom * 650 + (moveSp > 2 ? 5 : 0) + (p.grounded ? 0 : 7);

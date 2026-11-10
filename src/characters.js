@@ -219,6 +219,26 @@ const shinGeo = (o) => {
 const ease = (t) => t * t * (3 - 2 * t);
 const lerpN = (a, b, t) => a + (b - a) * t;
 
+// planta azul (mao esquerda) e lapis (mao direita): o que o personagem segura ao construir/editar, como no Fortnite
+function blueprintGeo() {
+  const b = new GeomBuilder();
+  const blue = C('#2f7fe6'), line = C('#dcecff');
+  b.addBox(-0.22, -0.34, -0.075, 0.22, 0.04, -0.06, blue);
+  const ln = (x0, y0, x1, y1) => b.addBox(x0, y0, -0.08, x1, y1, -0.074, line);
+  ln(-0.19, -0.31, 0.19, -0.3); ln(-0.19, 0.0, 0.19, 0.01); ln(-0.19, -0.31, -0.18, 0.01); ln(0.18, -0.31, 0.19, 0.01);
+  ln(-0.19, -0.16, 0.19, -0.153); ln(-0.06, -0.31, -0.053, 0.01); ln(0.07, -0.16, 0.077, 0.01);
+  ln(-0.15, -0.26, -0.09, -0.2); ln(0.0, -0.1, 0.05, -0.05);
+  return b.build();
+}
+function pencilGeo() {
+  const b = new GeomBuilder();
+  b.addBox(-0.018, -0.02, -0.2, 0.018, 0.02, 0.05, C('#ffd23f'));
+  b.addBox(-0.02, -0.022, -0.24, 0.02, 0.022, -0.2, C('#ff8fb3'));
+  b.addBox(-0.012, -0.014, 0.05, 0.012, 0.014, 0.09, C('#e8c9a0'));
+  b.addBox(-0.006, -0.007, 0.09, 0.006, 0.007, 0.11, C('#333333'));
+  return b.build();
+}
+
 export function createCharacter(o = randomOutfit()) {
   const root = new THREE.Group();
   const hip = new THREE.Group();
@@ -270,6 +290,16 @@ export function createCharacter(o = randomOutfit()) {
   flash.visible = false;
   gunGroup.add(flash);
 
+  const handL = new THREE.Group();
+  handL.position.set(0, -0.3, 0);
+  L.fore.add(handL);
+  const blueprint = new THREE.Mesh(blueprintGeo(), CHAR_MAT);
+  blueprint.castShadow = true; blueprint.visible = false;
+  handL.add(blueprint);
+  const pencil = new THREE.Mesh(pencilGeo(), CHAR_MAT);
+  pencil.castShadow = true; pencil.visible = false;
+  hand.add(pencil);
+
   const glider = new THREE.Group();   // mantido por compatibilidade (nao usado)
   glider.visible = false;
   root.add(glider);
@@ -279,7 +309,9 @@ export function createCharacter(o = randomOutfit()) {
 
   const ch = {
     root, hip, spine, head, armL: L.upper, armR: R.upper, foreL: L.fore, foreR: R.fore, legL: LL.thigh, legR: RL.thigh, hand, gunGroup, muzzle, flash, glider, outfit: o,
-    held: null, heldKind: null, flashT: 0, swingT: 0,
+    held: null, heldKind: null, flashT: 0, swingT: 0, building: false,
+    // modo construcao/edicao: planta numa mao e lapis na outra
+    setBuild(on) { if (this.building === on) return; this.building = on; blueprint.visible = on; pencil.visible = on; },
     hold(kind, rarity = 0) {
       if (this.heldKind === kind + rarity) return;
       if (this.held) { gunGroup.remove(this.held); this.held = null; }
@@ -375,16 +407,22 @@ export function createCharacter(o = randomOutfit()) {
           else { const e = ease((t - 0.55) / 0.45); uRx = lerpN(0.55, 0.6, e); fRx = lerpN(0.25, 0.9, e); uLx = lerpN(1.0, uLx, e); }
           gunPitch = t < 0.34 ? lerpN(0.9, 1.5, ease(t / 0.34)) : lerpN(1.5, 0.6, ease(Math.min(1, (t - 0.34) / 0.3)));
         }
+      } else if (this.building) {
+        // segurando a planta na frente do corpo e o lapis levantado
+        const bob = Math.sin(A.t * 2.1) * 0.03;
+        uLx = 1.0 + pitch * 0.3 + bob; uLz = 0.32; fLx = 0.95;
+        uRx = 0.8 + pitch * 0.3 - bob; fRx = 1.35;
       } else {
         uLx = -armSwing; uRx = armSwing; fLx = 0.25 + Math.max(0, -sw) * 0.55 * walk; fRx = 0.25 + Math.max(0, sw) * 0.55 * walk;
       }
       if (st.swing >= 0 && pick_) { /* tronco acompanha o golpe */ }
       let spineTwist = twist;
       if (st.swing >= 0 && pick_) spineTwist += st.swing < 0.34 ? lerpN(0, -0.35, ease(st.swing / 0.34)) : lerpN(-0.35, 0.3, ease(Math.min(1, (st.swing - 0.34) / 0.25)));
-      if (A.airK > 0.5 && !gun) { uLx = 0.4; uRx = 0.4; uLz = -0.5; uRz = 0.5; }
-      if (A.slideK > 0.3 && !gun) { uLx = 0.9; uRx = 0.9; fLx = 0.5; fRx = 0.5; }
+      const bld = this.building && !gun && !pick_;
+      if (A.airK > 0.5 && !gun && !bld) { uLx = 0.4; uRx = 0.4; uLz = -0.5; uRz = 0.5; }
+      if (A.slideK > 0.3 && !gun && !bld) { uLx = 0.9; uRx = 0.9; fLx = 0.5; fRx = 0.5; }
       uRz = pick_ || gun ? -0.12 : -0.1;
-      if (!gun) uLz = 0.1;
+      if (!gun && !bld) uLz = 0.1;
 
       // ---- aplica com suavizacao ----
       hip.position.y = lerpN(hip.position.y, hipY, k);

@@ -133,6 +133,11 @@
   .toast.big { font-size: 46px; border-color: var(--yellow); color: var(--yellow); padding: 8px 30px; }
   @keyframes toastin { from { transform: scale(.6); opacity: 0; } }
   #gain { position: absolute; left: 50%; top: 56%; transform: translateX(60px); font-size: 24px; color: #ffe680; opacity: 0; } #gain.show { opacity: 1; transition: none; }
+  #editTip { position: absolute; left: 50%; top: 50%; transform: translate(-50%, 34px); display: flex; gap: 22px; font-size: 17px; letter-spacing: 1px; white-space: nowrap; }
+  #editTip b { background: #fff; color: #10203a; padding: 0 7px; margin-right: 6px; border-radius: 3px; text-shadow: none; }
+  #pieceBar { position: absolute; left: 50%; top: 50%; transform: translate(-50%, 26px); width: 96px; text-align: center; font-size: 14px; letter-spacing: 1px; }
+  #pieceBar .t { height: 7px; background: rgba(0,0,0,.6); border: 1px solid rgba(255,255,255,.75); border-radius: 2px; overflow: hidden; } #pieceBar .t i { display: block; height: 100%; width: 0; background: #5fd04b; }
+  #pieceLbl { margin-top: 4px; } #pieceLbl b { background: #fff; color: #10203a; padding: 0 6px; margin-right: 5px; border-radius: 3px; text-shadow: none; }
   #buildHelp { position: absolute; left: 50%; bottom: 100px; transform: translateX(-50%); display: flex; gap: 10px; font-size: 20px; }
   #buildHelp .bp { background: rgba(10,10,40,.75); border: 2px solid rgba(255,255,255,.4); padding: 4px 14px; } #buildHelp .bp.sel { border-color: #62d0ff; background: rgba(20,60,120,.85); }
   #buildHelp b { background: #62d0ff; color: #05204a; padding: 0 7px; margin-right: 6px; border-radius: 3px; text-shadow: none; }
@@ -202,6 +207,8 @@
   <div id="toasts"></div>
   <div id="gain"></div>
   <div id="buildHelp" class="hidden"></div>
+  <div id="editTip" class="hidden"></div>
+  <div id="pieceBar" class="hidden"><div class="t"><i id="pieceFill"></i></div><div id="pieceLbl"></div></div>
   <div id="vitals"><div class="bar sh"><i id="shBar"></i><span id="shNum">0</span></div><div class="bar hp"><i id="hpBar"></i><span id="hpNum">100</span></div></div>
   <div id="hudBR">
     <div id="mats"></div>

@@ -19,6 +19,45 @@ export const GRID = { wall: [3, 3], floor: [2, 2], ramp: [2, 2], roof: [2, 2] };
 export const isPiece = (o) => !!o && TYPES.includes(o.type) && !!o.colliders;
 export const FULL_MASK = (type = 'wall') => new Array(GRID[type][0] * GRID[type][1]).fill(true);
 
+
+// ===== Visual estilo Fortnite =====
+// painel translucido da peca em construcao ("planta")
+export const GLASS_MAT = new THREE.MeshBasicMaterial({ color: '#e3f1ff', transparent: true, opacity: 0.46, depthWrite: false, side: THREE.DoubleSide });
+const WHITE = new THREE.Color('#ffffff');
+const FB = 0.2, FD = 0.17;     // viga da moldura: largura e meia-profundidade
+const SB = 0.05, SD = 0.12;    // montante interno
+// tempo para a peca ficar pronta e fracao da vida com que ela nasce
+export const BUILD = { wood: { time: 3.0, start: 0.6 }, stone: { time: 4.6, start: 0.35 }, metal: { time: 6.0, start: 0.25 } };
+const PAL = {
+  wood:  { frame: '#e2b47a', fill: ['#c9823f', '#b8702f', '#d6924f', '#a9622a', '#cc8a48', '#bd7838'] },
+  stone: { frame: '#cfcbc0', fill: ['#b7b0a4', '#a69f93', '#c4beb2', '#968f84', '#b0a99d'] },
+  metal: { frame: '#a4adb7', fill: ['#8f9aa7', '#a5afba', '#7f8a97', '#b3bcc6'] },
+};
+const palOf = (p) => PAL[p.mat] || PAL.wood;
+const fillColor = (pal, rnd) => new THREE.Color(pal.fill[(rnd() * pal.fill.length) | 0]).multiplyScalar(0.93 + rnd() * 0.14);
+// aleatorio deterministico por peca (o mesmo desenho ao refazer a malha)
+function rngOf(p) {
+  let st = (Math.imul(p.i, 73856093) ^ Math.imul(p.j, 19349663) ^ Math.imul((p.y * 100) | 0, 83492791) ^ Math.imul(p.type.charCodeAt(0), 2654435) ^ (p.axis === 'x' ? 5 : 9) ^ Math.imul(p.dir || 0, 40503)) >>> 0 || 1;
+  return () => { st = (Math.imul(st, 1664525) + 1013904223) >>> 0; return st / 4294967296; };
+}
+// viga de secao retangular entre dois pontos (para longarinas e espigoes inclinados)
+function addBeam(b, p0, p1, w, h, color) {
+  let dx = p1[0] - p0[0], dy = p1[1] - p0[1], dz = p1[2] - p0[2];
+  const L = Math.hypot(dx, dy, dz) || 1; dx /= L; dy /= L; dz /= L;
+  let sx = dz, sz = -dx;
+  let sl = Math.hypot(sx, sz);
+  if (sl < 1e-4) { sx = 1; sz = 0; sl = 1; }
+  sx /= sl; sz /= sl;
+  let ux = dy * sz, uy = dz * sx - dx * sz, uz = -dy * sx;
+  if (uy < 0) { ux = -ux; uy = -uy; uz = -uz; }
+  const hw = w / 2, hh = h / 2;
+  const c = (p, a, e) => [p[0] + sx * a * hw + ux * e * hh, p[1] + uy * e * hh, p[2] + sz * a * hw + uz * e * hh];
+  const A = [c(p0, -1, -1), c(p0, 1, -1), c(p0, 1, 1), c(p0, -1, 1)], B = [c(p1, -1, -1), c(p1, 1, -1), c(p1, 1, 1), c(p1, -1, 1)];
+  const ctr = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2];
+  b.addFace(A, color, ctr); b.addFace(B, color, ctr);
+  for (let k = 0; k < 4; k++) { const n = (k + 1) % 4; b.addFace([A[k], A[n], B[n], B[k]], color, ctr); }
+}
+
 let pid = 0;
 
 // retangulos (em tiles) que cobrem os tiles presentes: tudo, ou faixas por linha
@@ -110,185 +149,207 @@ export class Piece {
     return [this.i * G + G / 2, this.y + (this.type === 'ramp' ? H / 2 : this.type === 'roof' ? ROOF_PEAK / 2 : 0), this.j * G + G / 2];
   }
 
-  // ----- visual -----
-  fill(b) {
-    if (this.type === 'wall') this.fillWall(b);
-    else if (this.type === 'floor') this.fillFloor(b);
-    else if (this.type === 'ramp') this.fillStairs(b);
-    else this.fillRoof(b);
+  // ----- visual (estilo Fortnite) -----
+  // Cada peca tem 3 camadas: moldura de vigas (sempre visivel), painel translucido azulado ("planta")
+  // e o preenchimento (tabuas / tijolos / chapas) que vai aparecendo enquanto a peca se constroi.
+  // C = { frame: GeomBuilder, glass: GeomBuilder, fills: [{ th, fn(builder) }] }
+  parts(C) {
+    if (this.type === 'wall') this.partsWall(C);
+    else if (this.type === 'floor') this.partsFloor(C);
+    else if (this.type === 'ramp') this.partsStairs(C);
+    else this.partsRoof(C);
   }
 
-  fillWall(b) {
-    const tw = G / 3, m = this.mask, c = this.color, tr = this.trim;
-    const box = (a0, a1, b0, b1, half, col) => {
-      const y0 = this.y + b0 * TH, y1 = this.y + b1 * TH;
-      if (this.axis === 'x') b.addBox(this.i * G + a0, y0, this.j * G - half, this.i * G + a1, y1, this.j * G + half, col, col);
-      else b.addBox(this.i * G - half, y0, this.j * G + a0, this.i * G + half, y1, this.j * G + a1, col, col);
+  partsWall(C) {
+    const m = this.mask, tw = G / 3, pal = palOf(this), rnd = rngOf(this);
+    const fc = new THREE.Color(pal.frame), fd = fc.clone().multiplyScalar(0.8);
+    const wb = (b, a0, a1, y0, y1, half, col, col2) => {
+      if (this.axis === 'x') b.addBox(this.i * G + a0, this.y + y0, this.j * G - half, this.i * G + a1, this.y + y1, this.j * G + half, col, col2 || col);
+      else b.addBox(this.i * G - half, this.y + y0, this.j * G + a0, this.i * G + half, this.y + y1, this.j * G + a1, col, col2 || col);
     };
-    const wood = this.mat === 'wood';
-    if (wood) this.fillLogs(b, box);
-    else for (const r of maskRects(m, 3, 3)) box(r.c0 * tw, (r.c1 + 1) * tw, r.r0, r.r1 + 1, 0.08, c);
-    const rail = wood ? new THREE.Color('#5a3720') : tr;
+    const P = (c, r) => c >= 0 && c < 3 && r >= 0 && r < 3 && m[r * 3 + c];
+    // moldura externa e bordas dos buracos
     for (const e of edgeBeams(m, 3, 3)) {
       if (e.kind === 'h') {
-        const bw = BW * 1.4 / TH;
-        const b0 = e.side > 0 ? e.line : e.line - bw, b1 = e.side > 0 ? e.line + bw : e.line;
-        box(e.i0 * tw, (e.i1 + 1) * tw, b0, b1, T / 2, rail);
+        const y0 = e.side > 0 ? e.line * TH : e.line * TH - FB, y1 = e.side > 0 ? e.line * TH + FB : e.line * TH;
+        wb(C.frame, e.i0 * tw, (e.i1 + 1) * tw, y0, y1, FD, fc, fd);
       } else {
-        const a0 = e.side > 0 ? e.line * tw : e.line * tw - BW, a1 = e.side > 0 ? e.line * tw + BW : e.line * tw;
-        box(a0, a1, e.i0, e.i1 + 1, T / 2, rail);
+        const a0 = e.side > 0 ? e.line * tw : e.line * tw - FB, a1 = e.side > 0 ? e.line * tw + FB : e.line * tw;
+        wb(C.frame, a0, a1, e.i0 * TH, (e.i1 + 1) * TH, FD, fc, fd);
       }
     }
-  }
-
-  // parede de madeira: toras verticais tortas, de cores variadas (como uma cerca de troncos)
-  fillLogs(b, box) {
-    const tw = G / 3, m = this.mask;
-    const seed = (this.i * 73856093) ^ (this.j * 19349663) ^ ((this.y * 100) | 0) ^ (this.axis === 'x' ? 5 : 9);
-    let st = seed >>> 0 || 1;
-    const rnd = () => { st = (st * 1664525 + 1013904223) >>> 0; return st / 4294967296; };
-    const PAL = ['#8b5a3c', '#a8693f', '#c47a4a', '#6b4129', '#d08a5a', '#7a4a2e', '#b87445', '#935c38'];
-    const N = 18, slot = G / N;
-    // sem tabua de fundo: as frestas entre as toras sao vazadas
-    const slotOff = new Array(N);
-    for (let k = 0; k < N; k++) {
-      const col = new THREE.Color(PAL[(rnd() * PAL.length) | 0]).multiplyScalar(0.9 + rnd() * 0.2);
-      const w = slot * (0.5 + rnd() * 0.2) * 0.5;
-      const cx = (k + 0.5) * slot;
-      const tile = Math.min(2, Math.floor(cx / tw));
-      let off = (rnd() - 0.5) * slot * 0.5;
-      for (let r = 0; r < 3; r++) {
-        const next = (rnd() - 0.5) * slot * 0.6;
-        if (m[r * 3 + tile]) {
-          const hw = w;
-          // cada segmento: tora de 2 camadas (miolo claro + laterais escuras) para dar volume arredondado
-          box(cx + off - hw, cx + off + hw, r, r + 1, 0.1, col.clone().multiplyScalar(0.8));
-          box(cx + off - hw * 0.55, cx + off + hw * 0.55, r, r + 1, 0.125, col);
-          // nos / veios
-          if (rnd() < 0.4) box(cx + off - hw * 0.4, cx + off + hw * 0.4, r + 0.3 + rnd() * 0.4, r + 0.36 + rnd() * 0.4, 0.13, col.clone().multiplyScalar(0.6));
+    // montantes e travessas internas, entre tiles vizinhos
+    for (let r = 0; r < 3; r++) for (let c = 1; c < 3; c++) if (P(c - 1, r) && P(c, r)) wb(C.frame, c * tw - SB, c * tw + SB, r * TH, (r + 1) * TH, SD, fd, fd);
+    for (let c = 0; c < 3; c++) for (let r = 1; r < 3; r++) if (P(c, r - 1) && P(c, r)) wb(C.frame, c * tw, (c + 1) * tw, r * TH - SB, r * TH + SB, SD, fd, fd);
+    // painel translucido
+    for (const r of maskRects(m, 3, 3)) wb(C.glass, r.c0 * tw, (r.c1 + 1) * tw, r.r0 * TH, (r.r1 + 1) * TH, 0.03, WHITE);
+    // preenchimento por tile
+    for (let r = 0; r < 3; r++) {
+      for (let c = 0; c < 3; c++) {
+        if (!m[r * 3 + c]) continue;
+        const a0 = c * tw, a1 = (c + 1) * tw, y0 = r * TH, y1 = (r + 1) * TH;
+        const add = (pa0, pa1, ya, yb, half) => {
+          if (pa1 - pa0 < 0.1) return;
+          const col = fillColor(pal, rnd), dk = col.clone().multiplyScalar(0.84);
+          C.fills.push({ th: 0.03 + rnd() * 0.94, fn: (b) => wb(b, pa0, pa1, ya, yb, half, col, dk) });
+        };
+        if (this.mat === 'stone') {            // tijolos em fiadas desencontradas
+          const rows = 4, rh = (y1 - y0) / rows, bw = (a1 - a0) / 3;
+          for (let k = 0; k < rows; k++) {
+            let st = a0 - ((k + r) % 2 ? bw / 2 : 0);
+            while (st < a1 - 0.01) { add(Math.max(a0, st) + 0.025, Math.min(a1, st + bw) - 0.025, y0 + k * rh + 0.025, y0 + (k + 1) * rh - 0.025, 0.12); st += bw; }
+          }
+        } else if (this.mat === 'metal') {     // chapas
+          const rh = (y1 - y0) / 2;
+          for (let k = 0; k < 2; k++) {
+            const mid = a0 + (a1 - a0) * 0.5;
+            add(a0 + 0.04, mid - 0.03, y0 + k * rh + 0.04, y0 + (k + 1) * rh - 0.04, 0.09);
+            add(mid + 0.03, a1 - 0.04, y0 + k * rh + 0.04, y0 + (k + 1) * rh - 0.04, 0.09);
+          }
+        } else {                               // tabuas horizontais de madeira
+          const rows = 5, rh = (y1 - y0) / rows;
+          for (let k = 0; k < rows; k++) {
+            const ya = y0 + k * rh + 0.025, yb = y0 + (k + 1) * rh - 0.025;
+            if (rnd() < 0.55) {
+              const s = a0 + (a1 - a0) * (0.3 + rnd() * 0.4);
+              add(a0 + 0.03, s - 0.02, ya, yb, 0.1); add(s + 0.02, a1 - 0.03, ya, yb, 0.1);
+            } else add(a0 + 0.03, a1 - 0.03, ya, yb, 0.1);
+          }
         }
-        off = next;
       }
     }
   }
 
-  fillFloor(b) {
-    const tw = G / 2, m = this.mask, c = this.color, tr = this.trim;
-    const sk = this.skirt || 0;
-    const x0 = this.i * G, z0 = this.j * G;
-    for (const r of maskRects(m, 2, 2)) {
-      // tabuas (estilo "plastico"): faixas com cor levemente diferente e frestas finas
-      const xa = x0 + r.c0 * tw, xb = x0 + (r.c1 + 1) * tw, za = z0 + r.r0 * tw, zb = z0 + (r.r1 + 1) * tw;
-      const wood = this.mat === 'wood';
-      if (!wood) b.addBox(xa, this.y - T - sk, za, xb, this.y - 0.02, zb, tr, tr);   // madeira: piso vazado entre as tabuas
-      const n = Math.max(1, Math.round((xb - xa) / 0.5)), sw = (xb - xa) / n, gp = wood ? 0.07 : 0.015;
-      for (let k = 0; k < n; k++) {
-        const col = c.clone().multiplyScalar(k % 2 ? 0.93 : 1.05 + ((k * 7) % 5) * 0.01);
-        b.addBox(xa + k * sw + gp, this.y - (wood ? T : 0.08), za, xa + (k + 1) * sw - gp, this.y, zb, col, col);
-      }
-    }
-    const dn = this.y - T - 0.2 - sk;
+  partsFloor(C) {
+    const m = this.mask, tw = G / 2, pal = palOf(this), rnd = rngOf(this);
+    const fc = new THREE.Color(pal.frame), fd = fc.clone().multiplyScalar(0.8);
+    const x0 = this.i * G, z0 = this.j * G, y = this.y;
+    const P = (c, r) => c >= 0 && c < 2 && r >= 0 && r < 2 && m[r * 2 + c];
     for (const e of edgeBeams(m, 2, 2)) {
       if (e.kind === 'h') {
-        const za = e.side > 0 ? z0 + e.line * tw : z0 + e.line * tw - BW, zb = e.side > 0 ? z0 + e.line * tw + BW : z0 + e.line * tw;
-        b.addBox(x0 + e.i0 * tw, dn, za, x0 + (e.i1 + 1) * tw, this.y, zb, tr, tr);
+        const za = e.side > 0 ? z0 + e.line * tw : z0 + e.line * tw - FB;
+        C.frame.addBox(x0 + e.i0 * tw, y - T - 0.14, za, x0 + (e.i1 + 1) * tw, y, za + FB, fc, fd);
       } else {
-        const xa = e.side > 0 ? x0 + e.line * tw : x0 + e.line * tw - BW, xb = e.side > 0 ? x0 + e.line * tw + BW : x0 + e.line * tw;
-        b.addBox(xa, dn, z0 + e.i0 * tw, xb, this.y, z0 + (e.i1 + 1) * tw, tr, tr);
+        const xa = e.side > 0 ? x0 + e.line * tw : x0 + e.line * tw - FB;
+        C.frame.addBox(xa, y - T - 0.14, z0 + e.i0 * tw, xa + FB, y, z0 + (e.i1 + 1) * tw, fc, fd);
+      }
+    }
+    // barrotes internos
+    for (let r = 0; r < 2; r++) if (P(0, r) && P(1, r)) C.frame.addBox(x0 + tw - SB, y - T - 0.08, z0 + r * tw, x0 + tw + SB, y - 0.01, z0 + (r + 1) * tw, fd, fd);
+    for (let c = 0; c < 2; c++) if (P(c, 0) && P(c, 1)) C.frame.addBox(x0 + c * tw, y - T - 0.08, z0 + tw - SB, x0 + (c + 1) * tw, y - 0.01, z0 + tw + SB, fd, fd);
+    for (const r of maskRects(m, 2, 2)) C.glass.addBox(x0 + r.c0 * tw, y - 0.1, z0 + r.r0 * tw, x0 + (r.c1 + 1) * tw, y - 0.05, z0 + (r.r1 + 1) * tw, WHITE);
+    // placas do piso
+    const n = this.mat === 'wood' ? 4 : 2, cs = tw / n;
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 2; c++) {
+        if (!m[r * 2 + c]) continue;
+        const xa = x0 + c * tw, za = z0 + r * tw;
+        for (let a = 0; a < n; a++) {
+          for (let k = 0; k < n; k++) {
+            const col = fillColor(pal, rnd).multiplyScalar((a + k) % 2 ? 0.94 : 1.04), dk = col.clone().multiplyScalar(0.78);
+            const bx0 = xa + a * cs + 0.03, bz0 = za + k * cs + 0.03, bx1 = xa + (a + 1) * cs - 0.03, bz1 = za + (k + 1) * cs - 0.03;
+            C.fills.push({ th: 0.03 + rnd() * 0.94, fn: (b) => b.addBox(bx0, y - 0.17, bz0, bx1, y, bz1, col, dk) });
+          }
+        }
       }
     }
   }
 
-  // escada com degraus e longarinas, vazia por baixo; editavel em 2x2
-  fillStairs(b) {
-    const N = 12, d = G / N, rise = SLOPE * d, yb = this.y;
-    const c = this.color, tr = this.trim;
-    const light = c.clone().multiplyScalar(1.08);
-    const SW = 0.24, nc = 2, nr = 2, tw = G / nc, th = G / nr;
-    const sb = (ua, ub, va, vb, ya, yb2, col, col2) => {
-      const r = this.uvRect(ua, ub, va, vb);
-      b.addBox(r[0], ya, r[1], r[2], yb2, r[3], col, col2 || col);
-    };
+  // escada com longarinas e degraus, vazia por baixo
+  partsStairs(C) {
+    const m = this.mask, nc = 2, nr = 2, tw = G / nc, th = G / nr, yb = this.y;
+    const pal = palOf(this), rnd = rngOf(this);
+    const fc = new THREE.Color(pal.frame), fd = fc.clone().multiplyScalar(0.8);
+    const SW = 0.3;
+    const P3 = (u, v, dy = 0) => { const r = this.uvRect(u, u, v, v); return [r[0], yb + SLOPE * u + dy, r[1]]; };
+    const sbox = (b, ua, ub, va, vb, ya, yb2, col, col2) => { const r = this.uvRect(ua, ub, va, vb); b.addBox(r[0], ya, r[1], r[2], yb2, r[3], col, col2 || col); };
+    for (const e of edgeBeams(m, nc, nr)) {
+      if (e.kind === 'v') {          // longarina inclinada na lateral
+        const v = e.side > 0 ? e.line * tw + SW / 2 : e.line * tw - SW / 2;
+        addBeam(C.frame, P3(e.i0 * th, v, -0.2), P3((e.i1 + 1) * th, v, -0.2), SW, 0.4, fc);
+      } else {                       // travessa na ponta de baixo / de cima
+        const u = e.side > 0 ? e.line * th + 0.13 : e.line * th - 0.13;
+        const yy = yb + SLOPE * u;
+        sbox(C.frame, u - 0.13, u + 0.13, e.i0 * tw, (e.i1 + 1) * tw, yy - 0.4, yy, fd, fd);
+      }
+    }
+    for (const r of maskRects(m, nc, nr)) {
+      const ua = r.r0 * th, ub = (r.r1 + 1) * th, va = r.c0 * tw, vb = (r.c1 + 1) * tw;
+      C.glass.addFace([P3(ua, va, -0.12), P3(ub, va, -0.12), P3(ub, vb, -0.12), P3(ua, vb, -0.12)], WHITE, [this.i * G + G / 2, yb - 60, this.j * G + G / 2]);
+    }
     // faixas de colunas presentes por linha (ao longo da subida)
     const rowRuns = [];
     for (let r = 0; r < nr; r++) {
       const runs = [];
       let cc = 0;
       while (cc < nc) {
-        if (!this.mask[r * nc + cc]) { cc++; continue; }
+        if (!m[r * nc + cc]) { cc++; continue; }
         let e = cc;
-        while (e + 1 < nc && this.mask[r * nc + e + 1]) e++;
+        while (e + 1 < nc && m[r * nc + e + 1]) e++;
         runs.push([cc * tw, (e + 1) * tw]);
         cc = e + 1;
       }
       rowRuns.push(runs);
     }
+    const N = 14, d = G / N, rise = SLOPE * d;
     for (let k = 0; k < N; k++) {
       const ua = k * d, ub = (k + 1) * d;
       const r = Math.min(nr - 1, Math.floor(((k + 0.5) * d) / th));
       const top = yb + SLOPE * (k + 0.5) * d;
       for (const [va, vb] of rowRuns[r]) {
-        sb(ua, ub, va + SW, vb - SW, top - 0.12, top, k % 2 ? light : c, tr);   // degrau
-        sb(ua, ua + 0.07, va + SW, vb - SW, top - rise, top - 0.1, tr, tr);      // espelho
-        sb(ua, ub, va, va + SW, top - 0.42, top, tr, tr);                         // longarina
-        sb(ua, ub, vb - SW, vb, top - 0.42, top, tr, tr);
+        const col = fillColor(pal, rnd).multiplyScalar(k % 2 ? 0.95 : 1.05), dk = col.clone().multiplyScalar(0.72);
+        C.fills.push({
+          th: 0.03 + rnd() * 0.94,
+          fn: (b) => {
+            sbox(b, ua, ub, va + SW, vb - SW, top - 0.13, top, col, dk);        // degrau
+            sbox(b, ua, ua + 0.08, va + SW, vb - SW, top - rise, top - 0.1, dk, dk); // espelho
+          },
+        });
       }
     }
   }
 
-  // cone: telhado em piramide, oco por baixo; editavel em 3x3
-  fillRoof(b) {
-    const x0 = this.i * G, z0 = this.j * G, x1 = x0 + G, z1 = z0 + G, yb = this.y;
-    const cx = x0 + G / 2, cz = z0 + G / 2, apex = yb + ROOF_PEAK;
-    const c = this.color, tr = this.trim;
-    const dn = 0.28;
-    const full = this.mask.every(Boolean);
-    if (full) {
-      const corners = [[x0, z0], [x1, z0], [x1, z1], [x0, z1]];
-      const out = [cx, yb + 0.3, cz];
-      for (let k = 0; k < 4; k++) {
-        const a = corners[k], e = corners[(k + 1) % 4];
-        const shade = c.clone().multiplyScalar(k % 2 ? 0.92 : 1.05);
-        b.addFace([[a[0], yb, a[1]], [e[0], yb, e[1]], [cx, apex, cz]], shade, out);
-        b.addFace([[a[0], yb - dn, a[1]], [e[0], yb - dn, e[1]], [cx, apex - dn * 1.6, cz]], tr, [cx, apex + 9, cz]);
-      }
-      const bt = 0.22;
-      b.addBox(x0, yb - dn, z0, x1, yb + 0.12, z0 + bt, tr, tr);
-      b.addBox(x0, yb - dn, z1 - bt, x1, yb + 0.12, z1, tr, tr);
-      b.addBox(x0, yb - dn, z0 + bt, x0 + bt, yb + 0.12, z1 - bt, tr, tr);
-      b.addBox(x1 - bt, yb - dn, z0 + bt, x1, yb + 0.12, z1 - bt, tr, tr);
-      return;
-    }
-    // editado: telhado feito tile a tile
-    const hh = G / 2, tw = G / 2;
+  // cone: piramide com vigas nas quinas, oca por baixo; editavel em 2x2
+  partsRoof(C) {
+    const x0 = this.i * G, z0 = this.j * G, x1 = x0 + G, z1 = z0 + G, yb = this.y, hh = G / 2;
+    const cx = x0 + hh, cz = z0 + hh, apex = yb + ROOF_PEAK, m = this.mask;
+    const pal = palOf(this), rnd = rngOf(this);
+    const fc = new THREE.Color(pal.frame), fd = fc.clone().multiplyScalar(0.8);
     const surf = (x, z) => yb + ROOF_PEAK * (1 - Math.min(Math.max(Math.abs(x - cx), Math.abs(z - cz)), hh) / hh);
-    const out = [cx, yb + 0.2, cz];
-    for (let r = 0; r < 2; r++) {
-      for (let cc = 0; cc < 2; cc++) {
-        if (!this.mask[r * 2 + cc]) continue;
-        const xa = x0 + cc * tw, xb = xa + tw, za = z0 + r * tw, zb = za + tw, xm = (xa + xb) / 2, zm = (za + zb) / 2;
-        const A = [xa, surf(xa, za), za], B = [xb, surf(xb, za), za], C = [xb, surf(xb, zb), zb], D = [xa, surf(xa, zb), zb], M = [xm, surf(xm, zm), zm];
-        const tri = (p, q, s, col) => {
-          b.addFace([p, q, s], col, out);
-          b.addFace([[p[0], p[1] - dn, p[2]], [q[0], q[1] - dn, q[2]], [s[0], s[1] - dn, s[2]]], tr, [cx, apex + 9, cz]);
-        };
-        const shade = c.clone().multiplyScalar((r + cc) % 2 ? 0.94 : 1.04);
-        tri(A, B, M, shade); tri(B, C, M, shade); tri(C, D, M, shade); tri(D, A, M, shade);
+    const A = [cx, apex, cz], inside = [cx, yb + 0.3, cz], above = [cx, apex + 9, cz];
+    for (const e of edgeBeams(m, 2, 2)) {
+      if (e.kind === 'h') {
+        const z = z0 + e.line * hh, xa = x0 + e.i0 * hh, xb = x0 + (e.i1 + 1) * hh;
+        if (e.line === 1) addBeam(C.frame, [xa, surf(xa, z) - 0.05, z], [xb, surf(xb, z) - 0.05, z], 0.22, 0.22, fc);
+        else { const za = e.line === 0 ? z : z - FB; C.frame.addBox(xa, yb - 0.22, za, xb, yb + 0.14, za + FB, fc, fd); }
+      } else {
+        const x = x0 + e.line * hh, za = z0 + e.i0 * hh, zb = z0 + (e.i1 + 1) * hh;
+        if (e.line === 1) addBeam(C.frame, [x, surf(x, za) - 0.05, za], [x, surf(x, zb) - 0.05, zb], 0.22, 0.22, fc);
+        else { const xa = e.line === 0 ? x : x - FB; C.frame.addBox(xa, yb - 0.22, za, xa + FB, yb + 0.14, zb, fc, fd); }
       }
     }
-    for (const e of edgeBeams(this.mask, 2, 2)) {
-      if (e.kind === 'h') {
-        const za = z0 + e.line * tw;
-        const xa = x0 + e.i0 * tw, xb = x0 + (e.i1 + 1) * tw;
-        const h = Math.max(surf(xa, za), surf(xb, za), surf((xa + xb) / 2, za));
-        const lo = Math.min(surf(xa, za), surf(xb, za));
-        b.addBox(xa, lo - dn, e.side > 0 ? za : za - BW, xb, h + 0.05, e.side > 0 ? za + BW : za, tr, tr);
-      } else {
-        const xa = x0 + e.line * tw;
-        const za = z0 + e.i0 * tw, zb = z0 + (e.i1 + 1) * tw;
-        const h = Math.max(surf(xa, za), surf(xa, zb), surf(xa, (za + zb) / 2));
-        const lo = Math.min(surf(xa, za), surf(xa, zb));
-        b.addBox(e.side > 0 ? xa : xa - BW, lo - dn, za, e.side > 0 ? xa + BW : xa, h + 0.05, zb, tr, tr);
+    const lerp3 = (p, q, t) => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
+    const down = (p, d) => [p[0], p[1] - d, p[2]];
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 2; c++) {
+        if (!m[r * 2 + c]) continue;
+        const K = [c ? x1 : x0, yb, r ? z1 : z0];
+        addBeam(C.frame, [K[0], K[1] - 0.04, K[2]], [cx, apex - 0.04, cz], 0.22, 0.24, fc);   // espigao da quina
+        const tris = [[K, [cx, yb, K[2]]], [K, [K[0], yb, cz]]];
+        for (const [k0, pm] of tris) {
+          C.glass.addFace([down(k0, 0.1), down(pm, 0.1), down(A, 0.1)], WHITE, inside);
+          const n = 5;
+          for (let s = 0; s < n; s++) {
+            const t0 = s / n, t1 = (s + 1) / n;
+            const q0 = lerp3(k0, A, t0), q1 = lerp3(pm, A, t0), q2 = lerp3(pm, A, t1), q3 = lerp3(k0, A, t1);
+            const verts = s === n - 1 ? [q0, q1, A] : [q0, q1, q2, q3];
+            const col = fillColor(pal, rnd).multiplyScalar(s % 2 ? 0.93 : 1.05), dk = col.clone().multiplyScalar(0.7);
+            C.fills.push({
+              th: 0.03 + rnd() * 0.94,
+              fn: (b) => { b.addFace(verts, col, inside); b.addFace(verts.map((p) => down(p, 0.16)), dk, above); },
+            });
+          }
+        }
       }
     }
   }
@@ -325,14 +386,57 @@ function makeColliders(p) {
     }
   } else for (const bx of p.colBoxes()) p.colliders.push(boxCollider(bx[0], bx[1], bx[2], bx[3], bx[4], bx[5], p));
 }
+function buildGeometry(p) {
+  const C = { frame: new GeomBuilder(), glass: new GeomBuilder(), fills: [] };
+  p.parts(C);
+  C.fills.sort((a, b) => a.th - b.th);
+  const b = C.frame;
+  p.baseCount = b.pos.length / 3;
+  p.stages = [];
+  for (const f of C.fills) { f.fn(b); p.stages.push(f.th, b.pos.length / 3); }
+  return { solid: b.build(), glass: C.glass.pos.length ? C.glass.build() : null };
+}
+// mostra so o preenchimento ja "construido"
+function applyProgress(p) {
+  if (!p.mesh) return;
+  let n = p.baseCount;
+  const st = p.stages;
+  for (let k = 0; k < st.length; k += 2) { if (st[k] <= p.prog) n = st[k + 1]; else break; }
+  p.mesh.geometry.setDrawRange(0, n);
+}
+function dropGlass(p) {
+  if (p.glass) { S.scene.remove(p.glass); p.glass.geometry.dispose(); p.glass = null; }
+}
 function makeMesh(p) {
-  const b = new GeomBuilder();
-  p.fill(b);
-  if (p.mesh) { p.mesh.geometry.dispose(); p.mesh.geometry = b.build(); return; }
-  p.mesh = new THREE.Mesh(b.build(), PIECE_MAT);
-  p.mesh.castShadow = true;
-  p.mesh.receiveShadow = true;
-  S.scene.add(p.mesh);
+  const g = buildGeometry(p);
+  if (p.mesh) { p.mesh.geometry.dispose(); p.mesh.geometry = g.solid; }
+  else {
+    p.mesh = new THREE.Mesh(g.solid, PIECE_MAT);
+    p.mesh.castShadow = true;
+    p.mesh.receiveShadow = true;
+    S.scene.add(p.mesh);
+  }
+  dropGlass(p);
+  if (p.prog < 1 && g.glass) {
+    p.glass = new THREE.Mesh(g.glass, GLASS_MAT);
+    p.glass.renderOrder = 3;
+    S.scene.add(p.glass);
+  } else if (g.glass) g.glass.dispose();
+  applyProgress(p);
+}
+
+// pecas ainda em construcao: avanca o progresso, a vida e o preenchimento
+const building = new Set();
+export function updatePieces(dt) {
+  for (const p of building) {
+    if (p.dead) { building.delete(p); continue; }
+    const B = BUILD[p.mat] || BUILD.wood;
+    const before = p.prog;
+    p.prog = Math.min(1, p.prog + dt / B.time);
+    p.hp = Math.min(p.maxHp, p.hp + p.maxHp * (1 - B.start) * (p.prog - before));
+    applyProgress(p);
+    if (p.prog >= 1) { dropGlass(p); building.delete(p); }
+  }
 }
 
 export function createPiece(o) {
@@ -351,8 +455,13 @@ export function createPiece(o) {
   let set = cols.get(ck);
   if (!set) cols.set(ck, (set = new Set()));
   set.add(p);
+  // nasce como "planta": moldura + painel, com parte da vida; vai se completando sozinha
+  const B = BUILD[p.mat] || BUILD.wood;
+  p.prog = o.prog !== undefined ? o.prog : 0;
+  p.hp = p.maxHp * (B.start + (1 - B.start) * p.prog);
   makeColliders(p);
   makeMesh(p);
+  if (p.prog < 1) building.add(p);
   return p;
 }
 
@@ -381,6 +490,8 @@ export function destroyPiece(p, silent = false) {
   const set = cols.get(colKey(p.i, p.j));
   if (set) set.delete(p);
   if (p.mesh) { S.scene.remove(p.mesh); p.mesh.geometry.dispose(); p.mesh = null; }
+  dropGlass(p);
+  building.delete(p);
   if (!silent && hooks.onDestroy) hooks.onDestroy(p);
 }
 
@@ -523,12 +634,10 @@ export function skirtFor(i, j, y) {
   return clamp(y - m + 0.15, 0, 3);
 }
 
-// Geometria "fantasma" para a previa da construcao
+// Geometria "fantasma" da previa: moldura + painel da peca (sem o preenchimento)
 export function ghostGeometry(o) {
   const tmp = new Piece({ ...o, maxHp: 1 });
   const b = new GeomBuilder();
-  const white = new THREE.Color('#ffffff');
-  tmp.color = white; tmp.trim = white;
-  tmp.fill(b);
+  tmp.parts({ frame: b, glass: b, fills: [] });
   return b.build();
 }
