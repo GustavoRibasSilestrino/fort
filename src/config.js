@@ -42,7 +42,7 @@ export const CONSUMABLES = {
 };
 
 export const MATS = {
-  wood:  { name: 'Madeira', color: '#d9a460', trim: '#a8692e', hp: 150 },
-  stone: { name: 'Pedra',   color: '#bdbbb4', trim: '#8d8b85', hp: 300 },
-  metal: { name: 'Metal',   color: '#a9bfd4', trim: '#6c819a', hp: 450 },
+  wood:  { name: 'Madeira', color: '#e6a54f', trim: '#a8601f', hp: 150 },
+  stone: { name: 'Pedra',   color: '#cfccc2', trim: '#8f8c84', hp: 300 },
+  metal: { name: 'Metal',   color: '#9cc4ee', trim: '#5f86b5', hp: 450 },
 };

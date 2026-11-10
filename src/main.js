@@ -46,7 +46,7 @@ async function init() {
   $('diffIn').value = S.settings.diff || 'normal';
 
   renderer = new THREE.WebGLRenderer({ canvas, antialias: q !== 'low', powerPreference: 'high-performance' });
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(S.settings.fov || 80, innerWidth / innerHeight, 0.15, 2600);
   S.renderer = renderer; S.scene = scene; S.camera = camera; S.player = player;

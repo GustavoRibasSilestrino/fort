@@ -4,6 +4,7 @@ import { bot, createBot, respawnBot, createDummy, placeDummy, removeDummy, dummy
 import { clearAllPieces } from './pieces.js';
 import { setWorldLimit } from './physics.js';
 import { setBoundary, makeSpawnRing } from './terrain.js';
+import { buildScenery } from './scenery.js';
 import { on, emit } from './events.js';
 import { toast } from './hud.js';
 import { sfx } from './audio.js';
@@ -27,6 +28,7 @@ export function startMode(type, diff, online = false) {
   const half = ARENA[type];
   setWorldLimit(half - 1.5);
   setBoundary(S.scene, half);
+  buildScenery(S.scene, half);
   for (const r of rings) S.scene.remove(r);
   rings = [];
   clearAllPieces();

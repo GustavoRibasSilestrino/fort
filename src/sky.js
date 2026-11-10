@@ -2,8 +2,8 @@ import * as THREE from 'three';
 import { S } from './state.js';
 
 // Ceu, nuvens, luzes, agua
-export const SKY_TOP = new THREE.Color('#3d8fe8');
-export const SKY_HORIZON = new THREE.Color('#bfe4ff');
+export const SKY_TOP = new THREE.Color('#2f84ff');
+export const SKY_HORIZON = new THREE.Color('#c9ecff');
 
 let sky, water, clouds = [];
 
@@ -36,9 +36,9 @@ export function buildSky(scene, quality) {
   scene.add(sky);
 
   // luzes
-  const hemi = new THREE.HemisphereLight('#cfe8ff', '#7a8f5a', 1.25);
+  const hemi = new THREE.HemisphereLight('#d6ecff', '#8fb36a', 1.35);
   scene.add(hemi);
-  const sun = new THREE.DirectionalLight('#fff3d6', 2.5);
+  const sun = new THREE.DirectionalLight('#fff0cc', 2.7);
   sun.position.set(90, 140, 60);
   sun.castShadow = quality !== 'low';
   const sh = sun.shadow;
