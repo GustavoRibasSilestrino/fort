@@ -1,6 +1,6 @@
 import { G, H, STEP } from './config.js';
 import { supportAt, raycast } from './physics.js';
-import { findAnchor, pieceExists, createPiece, skirtFor, isPiece } from './pieces.js';
+import { findAnchor, pieceExists, createPiece, skirtFor, isPiece, allPieces } from './pieces.js';
 
 // Logica de construcao: o jogador constroi onde a MIRA aponta (buildTargetAim);
 // o bot usa o alvo relativo a propria celula (buildTargetFor).
@@ -111,4 +111,37 @@ export function buildTargetFor(a, yaw, pitch, type, mat, opts = {}) {
 export function placePiece(t, owner = 'player') {
   if (pieceExists(t)) return null;
   return createPiece({ ...t, owner, skirt: t.type === 'roof' || t.type === 'ramp' ? 0 : skirtFor(t.i, t.j, t.y) });
+}
+
+// ===== Construcao relativa ao jogador: sempre para onde a camera aponta (frente / lados), 1 chunk =====
+export function buildTargetRel(a, yaw, pitch, type, mat) {
+  const pci = Math.floor(a.x / G), pcj = Math.floor(a.z / G);
+  const d = dirFromYaw(yaw);
+  let base = Math.floor((a.y + 0.4) / H) * H;      // nivel (andar) em que o jogador esta
+  let fwd = base;                                  // nivel das pecas a frente
+  for (const p of allPieces) {
+    if (p.type === 'ramp' && p.i === pci && p.j === pcj && a.y >= p.y - 0.3 && a.y <= p.y + H + 0.3) {
+      base = p.y;
+      fwd = p.dir === d ? p.y + H : p.y;           // subindo na escada: o que vem a frente comeca no topo dela
+      break;
+    }
+  }
+  const fi = pci + DX[d], fj = pcj + DZ[d];
+  const up = pitch > 0.45;                         // olhando para cima: peca por cima da cabeca
+  let t;
+  if (type === 'wall') {
+    let axis, i, j;
+    if (d === 0) { axis = 'z'; i = pci + 1; j = pcj; } else if (d === 2) { axis = 'z'; i = pci; j = pcj; }
+    else if (d === 1) { axis = 'x'; i = pci; j = pcj + 1; } else { axis = 'x'; i = pci; j = pcj; }
+    t = { type: 'wall', axis, i, j, y: base };
+    if (pieceExists(t)) t = { ...t, y: base + H };   // ja tem parede: empilha
+  } else if (type === 'floor') {
+    t = up ? { type: 'floor', i: pci, j: pcj, y: base + H } : { type: 'floor', i: fi, j: fj, y: fwd };
+  } else if (type === 'roof') {
+    t = up ? { type: 'roof', i: pci, j: pcj, y: base + H } : { type: 'roof', i: fi, j: fj, y: fwd + H };
+  } else {
+    t = { type: 'ramp', i: fi, j: fj, dir: d, y: fwd };
+  }
+  t.mat = mat;
+  return t;
 }

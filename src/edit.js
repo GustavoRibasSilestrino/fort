@@ -1,5 +1,7 @@
 import * as THREE from 'three';
 import { G, H, SLOPE } from './config.js';
+import { dirFromYaw, DX, DZ } from './build.js';
+import { ps } from './player.js';
 import { S } from './state.js';
 import { raycast, ROOF_PEAK } from './physics.js';
 import { isPiece, setMask, FULL_MASK, GRID } from './pieces.js';
@@ -93,6 +95,11 @@ export function startEdit() {
   const r = raycast(c.position.x, c.position.y, c.position.z, _d.x, _d.y, _d.z, 18);
   const o = r && r.c && r.c.owner;
   if (!isPiece(o) || o.owner !== 'player') { emit('toast', 'Mire em uma construção sua para editar'); return false; }
+  // so edita no chunk em que voce esta ou 1 chunk (box) a frente
+  const pl = S.player, pci = Math.floor(pl.x / G), pcj = Math.floor(pl.z / G), dd = dirFromYaw(ps.camYaw);
+  const ok = [[pci, pcj], [pci + DX[dd], pcj + DZ[dd]]];
+  const cells = o.type === 'wall' ? (o.axis === 'x' ? [[o.i, o.j - 1], [o.i, o.j]] : [[o.i - 1, o.j], [o.i, o.j]]) : [[o.i, o.j]];
+  if (!cells.some(([ci, cj]) => ok.some(([a, b]) => a === ci && b === cj))) { emit('toast', 'Só dá para editar no seu chunk ou 1 à frente'); return false; }
   E.active = true; E.piece = o; E.mask = o.mask.slice(); E.hover = -1; E.paint = null; E.skip = true; E.dirty = false; E.wasDown = false;
   buildTiles();
   sfx.empty();

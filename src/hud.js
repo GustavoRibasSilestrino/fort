@@ -15,7 +15,7 @@ const SHORT = { pistol: 'PISTOLA', smg: 'SUBMET.', ar: 'RIFLE', shotgun: 'ESCOP.
 const _v = new THREE.Vector3();
 
 export function initHud() {
-  for (const id of ['crosshair', 'hitmarker', 'progress', 'progText', 'progBar', 'toasts', 'gain', 'buildHelp', 'shBar', 'shNum', 'hpBar', 'hpNum', 'mats', 'ammo', 'hotbar', 'fps', 'dmgFlash', 'dmgdir', 'scope', 'hud', 'score', 'scoreMe', 'scoreBot', 'scoreSub', 'hints']) els[id] = $(id);
+  for (const id of ['crosshair', 'hitmarker', 'progress', 'progText', 'progBar', 'toasts', 'gain', 'buildHelp', 'shBar', 'shNum', 'hpBar', 'hpNum', 'mats', 'buildBar', 'ammo', 'hotbar', 'fps', 'dmgFlash', 'dmgdir', 'scope', 'hud', 'score', 'scoreMe', 'scoreBot', 'scoreSub', 'hints']) els[id] = $(id);
 
   on('hitmarker', ({ head, killed, dmg, x, y, z }) => {
     const h = els.hitmarker;
@@ -67,16 +67,28 @@ function damageNumber(x, y, z, dmg, head) {
 
 const fmtTime = (s) => { s = Math.max(0, Math.floor(s)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
 
+const SVG = {
+  wood: '<svg viewBox="0 0 48 40"><g fill="#c98f4f" stroke="#6b4423" stroke-width="2"><ellipse cx="14" cy="28" rx="9" ry="9"/><ellipse cx="32" cy="28" rx="9" ry="9"/><ellipse cx="23" cy="14" rx="9" ry="9"/></g><g fill="#e9c58b"><circle cx="14" cy="28" r="4"/><circle cx="32" cy="28" r="4"/><circle cx="23" cy="14" r="4"/></g></svg>',
+  stone: '<svg viewBox="0 0 48 40"><g stroke="#4a2418" stroke-width="2"><rect x="5" y="10" width="38" height="20" rx="1" fill="#c8553a"/><path d="M5 20H43M17 10V20M31 20V30M24 10V20" fill="none"/></g><rect x="7" y="12" width="9" height="6" fill="#e0775a"/></svg>',
+  metal: '<svg viewBox="0 0 48 40"><path d="M10 6H38V12H29V28H38V34H10V28H19V12H10Z" fill="#c6ccd4" stroke="#6b7480" stroke-width="2"/></svg>',
+  wall: '<svg viewBox="0 0 48 48"><path d="M10 14L34 8V36L10 42Z" fill="rgba(180,235,255,.55)" stroke="#e9fbff" stroke-width="2.5" stroke-linejoin="round"/></svg>',
+  floor: '<svg viewBox="0 0 48 48"><path d="M24 12L44 24L24 36L4 24Z" fill="rgba(180,235,255,.55)" stroke="#e9fbff" stroke-width="2.5" stroke-linejoin="round"/></svg>',
+  ramp: '<svg viewBox="0 0 48 48"><path d="M6 38V30H16V22H26V14H36V6H42V38Z" fill="rgba(180,235,255,.55)" stroke="#e9fbff" stroke-width="2.5" stroke-linejoin="round"/></svg>',
+  roof: '<svg viewBox="0 0 48 48"><path d="M24 6L42 32L24 40L6 32Z" fill="rgba(180,235,255,.55)" stroke="#e9fbff" stroke-width="2.5" stroke-linejoin="round"/><path d="M24 6V40M6 32L42 32" stroke="#e9fbff" stroke-width="1.5" fill="none"/></svg>',
+  tools: '<svg viewBox="0 0 48 48"><path d="M10 38L34 14M14 10L38 34" stroke="#e9fbff" stroke-width="4" stroke-linecap="round"/><circle cx="38" cy="10" r="4" fill="#e9fbff"/></svg>',
+};
+const keyLbl = (a) => `<div class="kb">${keyName(binds[a])}</div>`;
+
 function slotHtml(i, s, sel) {
-  const n = `<span class="n">${i + 1}</span>`;
-  if (!s) return `<div class="slot empty">${n}</div>`;
-  if (s.kind === 'pickaxe') return `<div class="slot ${sel ? 'sel' : ''}">${n}<span class="ico">⛏</span></div>`;
+  const wrap = (inner) => `<div class="sw ${sel ? 'selw' : ''}">${inner}<div class="kb">${i + 1}</div></div>`;
+  if (!s) return wrap(`<div class="slot empty"></div>`);
+  if (s.kind === 'pickaxe') return wrap(`<div class="slot ${sel ? 'sel' : ''}"><span class="ico">⛏</span></div>`);
   if (s.kind === 'weapon') {
     const c = RARITY[s.rarity].color;
-    return `<div class="slot ${sel ? 'sel' : ''}" style="border-color:${c};background:linear-gradient(180deg,rgba(10,10,40,.85),${c}55)">${n}<span style="color:${c}">${SHORT[s.wkey]}</span><span class="c">${s.mag}</span></div>`;
+    return wrap(`<div class="slot ${sel ? 'sel' : ''}" style="border-color:${c};background:linear-gradient(180deg,rgba(10,10,40,.85),${c}88)"><span style="color:#fff">${SHORT[s.wkey]}</span><span class="c">${s.mag}</span></div>`);
   }
   const d = CONSUMABLES[s.ckey];
-  return `<div class="slot ${sel ? 'sel' : ''}" style="border-color:${d.color}">${n}<span style="color:${d.color}">${d.short}</span><span class="c">${s.count}</span></div>`;
+  return wrap(`<div class="slot ${sel ? 'sel' : ''}" style="border-color:${d.color}"><span style="color:${d.color}">${d.short}</span><span class="c">${s.count}</span></div>`);
 }
 
 export function updateHud(dt) {
@@ -95,9 +107,12 @@ export function updateHud(dt) {
   const s = inv.slots[inv.sel];
   if (s && s.kind === 'weapon' && !ps.buildMode) {
     const W = WEAPONS[s.wkey];
-    els.ammo.innerHTML = `${s.mag} <small>/ ${inv.ammo[W.ammo] > 900 ? '∞' : inv.ammo[W.ammo]}</small>`;
+    els.ammo.innerHTML = `${s.mag} <small>/ ${inv.ammo[W.ammo] > 900 ? '∞' : inv.ammo[W.ammo]}</small><span class="wn">${W.name.toUpperCase()}</span>`;
   } else els.ammo.innerHTML = '';
-  els.mats.innerHTML = ['wood', 'stone', 'metal'].map((m) => `<div class="mat ${ps.buildMat === m ? 'sel' : ''}"><i style="background:${MATS[m].color}"></i>${S.infMats ? '∞' : inv.mats[m]}</div>`).join('');
+  els.mats.innerHTML = ['wood', 'stone', 'metal'].map((m) => `<div class="mi ${ps.buildMat === m ? 'sel' : ''}">${SVG[m]}<div class="inf">${S.infMats ? '∞' : inv.mats[m]}</div></div>`).join('');
+  const piece = (a, t, ico) => `<div class="bi ${ps.buildMode && ps.buildType === t ? 'sel' : ''}"><div class="box">${SVG[ico]}</div>${keyLbl(a)}</div>`;
+  const bb = `<div class="bi tog ${ps.buildMode ? 'sel' : ''}"><div class="box">${SVG.tools}</div>${keyLbl('buildToggle')}</div>` + piece('wall', 'wall', 'wall') + piece('floor', 'floor', 'floor') + piece('stairs', 'ramp', 'ramp') + piece('roof', 'roof', 'roof');
+  if (bb !== els.buildBar._h) { els.buildBar._h = bb; els.buildBar.innerHTML = bb; }
 
   const alive = p.mode !== 'dead';
   let xh = 'xh-pickaxe';
@@ -122,8 +137,6 @@ export function updateHud(dt) {
     const mode = S.settings.editConfirm || 'auto';
     const conf = mode === 'auto' ? '<div class="bp"><b>SOLTAR O CLIQUE</b>aplica</div>' : mode === 'release' ? `<div class="bp"><b>SOLTAR ${keyName(binds.edit)}</b>aplica</div>` : `<div class="bp"><b>${keyName(binds.edit)}</b>confirmar</div>`;
     bhHtml = `<div class="bp sel">EDITANDO</div><div class="bp"><b>CLIQUE</b>tirar / devolver parte</div>${conf}<div class="bp"><b>${keyName(binds.editReset)}</b>redefinir</div><div class="bp"><b>BOTÃO DIR.</b>cancelar</div>`;
-  } else if (ps.buildMode && alive) {
-    bhHtml = [['wall', 'wall', 'Parede'], ['floor', 'floor', 'Piso'], ['stairs', 'ramp', 'Escada'], ['roof', 'roof', 'Cone']].map(([a, t, n]) => `<div class="bp ${ps.buildType === t ? 'sel' : ''}"><b>${keyName(binds[a])}</b>${n}</div>`).join('') + `<div class="bp"><b>${keyName(binds.material)}</b>${MATS[ps.buildMat].name}</div>`;
   }
   if (bhHtml !== bh._html) { bh._html = bhHtml; bh.innerHTML = bhHtml; }
   bh.classList.toggle('hidden', !bhHtml);

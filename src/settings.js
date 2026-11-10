@@ -5,14 +5,14 @@ import { setVolume } from './audio.js';
 
 // Configuracoes gerais (sensibilidade, FOV, corrida automatica...) + tela de remapeamento de teclas
 const STORE = 'fortbuild_settings';
-const DEFAULTS = { sens: 1, adsSens: 1, scopeSens: 1, invertY: false, autoSprint: true, fov: 80, camDist: 1.6, editConfirm: 'auto', quality: 'medium', volume: 0.7, diff: 'normal' };
+const DEFAULTS = { sens: 1, adsSens: 1, scopeSens: 1, invertY: false, autoSprint: true, fov: 80, camDist: 1.2, editConfirm: 'auto', quality: 'medium', volume: 0.7, diff: 'normal' };
 const hooks = { onQuality: null };
 const $ = (id) => document.getElementById(id);
 
 export function loadSettings() {
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem(STORE) || '{}'); } catch (e) { saved = {}; }
-  if (saved.v !== 4) { delete saved.camDist; saved.editConfirm = 'auto'; saved.v = 4; }
+  if (saved.v !== 5) { delete saved.camDist; saved.editConfirm = 'auto'; saved.v = 5; }
   Object.assign(S.settings, DEFAULTS, saved);
   loadBinds();
 }
@@ -119,7 +119,7 @@ function buildGame() {
   root.innerHTML = '';
   checkRow(root, 'Corrida automática', 'autoSprint', 'Ligada: você corre ao andar para frente e a tecla de deslizar faz o slide. Desligada: segure a tecla de correr.');
   sliderRow(root, 'Campo de visão (FOV)', 'fov', 60, 110, 1);
-  sliderRow(root, 'Distância da câmera', 'camDist', 0.9, 4.5, 0.1, 'Menor = câmera mais perto do personagem');
+  sliderRow(root, 'Distância da câmera', 'camDist', 0.7, 4.5, 0.1, 'Menor = câmera mais perto do personagem');
   const er = document.createElement('div');
   er.className = 'srow';
   er.innerHTML = `<div class="sl"><span>Como confirmar a edição</span><small>Automático: aplica assim que você solta o clique, sem apertar a tecla de editar de novo</small></div><select><option value="auto">Automático (ao soltar o clique)</option><option value="release">Ao soltar a tecla de editar (segurar)</option><option value="press">Apertando a tecla de editar de novo</option></select>`;

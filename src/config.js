@@ -1,6 +1,6 @@
 // ===== Constantes e tabelas do jogo =====
-export const G = 6;              // tamanho da celula de construcao (m)
-export const H = 4;              // altura de um andar (m)
+export const G = 8;              // tamanho da celula de construcao (m)
+export const H = 5;              // altura de um andar (m)
 export const TH = H / 3;         // altura de uma linha de tiles da parede
 export const SLOPE = H / G;      // inclinacao das rampas
 export const WORLD_HALF = 400;   // o chao vai de -400 a +400

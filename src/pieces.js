@@ -148,7 +148,7 @@ export class Piece {
     let st = seed >>> 0 || 1;
     const rnd = () => { st = (st * 1664525 + 1013904223) >>> 0; return st / 4294967296; };
     const PAL = ['#8b5a3c', '#a8693f', '#c47a4a', '#6b4129', '#d08a5a', '#7a4a2e', '#b87445', '#935c38'];
-    const N = 15, slot = G / N;
+    const N = 18, slot = G / N;
     // sem tabua de fundo: as frestas entre as toras sao vazadas
     const slotOff = new Array(N);
     for (let k = 0; k < N; k++) {
@@ -301,7 +301,7 @@ export function pieceKey(o) {
 }
 // "chunk": 1 peca por espaco. Parede = uma por borda/nivel; piso, escada e cone dividem o mesmo espaco da celula/nivel.
 export function slotKey(o) {
-  return o.type === 'wall' ? `w|${o.axis}|${o.i}|${o.j}|${Math.round(o.y * 4)}` : `f|${o.i}|${o.j}|${Math.round(o.y * 4)}`;
+  return o.type === 'wall' ? `w|${o.axis}|${o.i}|${o.j}|${Math.round(o.y * 4)}` : `${o.type === 'floor' ? 'f' : 'r'}|${o.i}|${o.j}|${Math.round(o.y * 4)}`;
 }
 const bySlot = new Map();
 export function pieceExists(o) { return byKey.has(pieceKey(o)) || bySlot.has(slotKey(o)); }
@@ -449,20 +449,9 @@ function connBoxes(o) {
   }
 }
 const boxHit = (b, q, e) => b[0] - e <= q[3] && b[3] + e >= q[0] && b[1] - e <= q[4] && b[4] + e >= q[1] && b[2] - e <= q[5] && b[5] + e >= q[2];
-export function canPlace(t, a, yaw) {
-  if (yaw !== undefined && !inFront(t, a, yaw)) return false;
+export function canPlace(t, a) {
   const tb = connBoxes(t), e = 0.2;
   const pci = Math.floor(a.x / G), pcj = Math.floor(a.z / G);
-  // camada: so na mesma altura do jogador (ou um andar acima se empilhando / continuando a escada)
-  const lvl = Math.floor((a.y + 0.4) / H) * H;
-  if (t.type === 'wall') {
-    const same = Math.abs(t.y - lvl) < 0.3;
-    const stack = Math.abs(t.y - (lvl + H)) < 0.3 && bySlot.has(slotKey({ type: 'wall', axis: t.axis, i: t.i, j: t.j, y: t.y - H }));
-    if (!same && !stack) return false;
-  } else if (t.y < lvl - 0.3 || t.y > lvl + H + 0.3) return false;
-  // alcance: apenas 1 chunk (celula) ao redor de onde o jogador esta
-  const cells = t.type === 'wall' ? (t.axis === 'x' ? [[t.i, t.j - 1], [t.i, t.j]] : [[t.i - 1, t.j], [t.i, t.j]]) : [[t.i, t.j]];
-  if (!cells.some(([ci, cj]) => Math.abs(ci - pci) <= 1 && Math.abs(cj - pcj) <= 1)) return false;
   for (const p of allPieces) {
     if (t.type === 'ramp' && p.type === 'wall' && Math.abs(p.y - t.y) < 0.5) {   // nao fechar a propria escada
       const ends = t.dir === 0 || t.dir === 2 ? p.axis === 'z' && p.j === t.j && (p.i === t.i || p.i === t.i + 1) : p.axis === 'x' && p.i === t.i && (p.j === t.j || p.j === t.j + 1);

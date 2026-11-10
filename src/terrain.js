@@ -69,21 +69,6 @@ export function buildGround(scene, renderer) {
   mesh.receiveShadow = true;
   mesh.position.y = -0.02;
   scene.add(mesh);
-
-  // montanhas distantes para dar nocao de profundidade
-  const g = new THREE.Group();
-  let seed = 7;
-  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
-  for (let i = 0; i < 34; i++) {
-    const a = (i / 34) * Math.PI * 2 + rnd() * 0.1;
-    const r = 760 + rnd() * 260;
-    const h = 60 + rnd() * 140, w = 90 + rnd() * 130;
-    const m = new THREE.Mesh(new THREE.ConeGeometry(w, h, 6), new THREE.MeshLambertMaterial({ color: new THREE.Color().setHSL(0.27 + rnd() * 0.08, 0.35, 0.38 + rnd() * 0.12), flatShading: true }));
-    m.position.set(Math.cos(a) * r, h / 2 - 6, Math.sin(a) * r);
-    m.rotation.y = rnd() * 3;
-    g.add(m);
-  }
-  scene.add(g);
 }
 
 // moldura azul da arena

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { S } from './state.js';
+import { blob, paint, move, merge } from './organic.js';
 
 // Ceu, nuvens, luzes, agua
 export const SKY_TOP = new THREE.Color('#2f84ff');
@@ -50,23 +51,31 @@ export function buildSky(scene, quality) {
   S.sun = sun;
   S.sunOffset = new THREE.Vector3(90, 140, 60);
 
-  // nuvens
-  const cmat = new THREE.MeshLambertMaterial({ color: '#ffffff', flatShading: true, transparent: true, opacity: 0.95 });
-  const sphere = new THREE.IcosahedronGeometry(1, 1);
-  for (let i = 0; i < 26; i++) {
-    const g = new THREE.Group();
-    const n = 4 + ((Math.random() * 4) | 0);
+  // nuvens fofas: aglomerado de bolas suaves, achatado embaixo, com base azulada
+  const cmat = new THREE.MeshLambertMaterial({ vertexColors: true, emissive: '#dfeaff', emissiveIntensity: 0.35 });
+  const variants = [];
+  for (let v = 0; v < 5; v++) {
+    const parts = [];
+    const n = 9 + ((Math.random() * 6) | 0);
+    const L = 30 + Math.random() * 35;
     for (let k = 0; k < n; k++) {
-      const m = new THREE.Mesh(sphere, cmat);
-      const s = 14 + Math.random() * 16;
-      m.scale.set(s * 1.4, s * 0.7, s);
-      m.position.set((k - n / 2) * 20 + Math.random() * 8, Math.random() * 6, (Math.random() - 0.5) * 18);
-      g.add(m);
+      const t = k / (n - 1) - 0.5;
+      const r = (11 + Math.random() * 11) * (1 - Math.abs(t) * 0.9);
+      const b = blob(r, 3, 0.3, v * 11 + k, 1.25, 0.72, 1);
+      paint(b, '#c4d2ea', '#ffffff', 0.03, -r * 0.7, r * 0.7, v);
+      parts.push(move(b, t * L * 2 + (Math.random() - 0.5) * 8, Math.abs(t) * -6 + Math.random() * 8 + r * 0.25, (Math.random() - 0.5) * 18));
     }
-    g.position.set((Math.random() - 0.5) * 1300, 230 + Math.random() * 120, (Math.random() - 0.5) * 1300);
-    g.userData.speed = 2 + Math.random() * 3;
-    scene.add(g);
-    clouds.push(g);
+    variants.push(merge(parts));
+  }
+  for (let i = 0; i < 24; i++) {
+    const m = new THREE.Mesh(variants[i % variants.length], cmat);
+    const s = 0.8 + Math.random() * 1.1;
+    m.scale.set(s, s * (0.8 + Math.random() * 0.4), s);
+    m.rotation.y = Math.random() * Math.PI;
+    m.position.set((Math.random() - 0.5) * 1300, 210 + Math.random() * 130, (Math.random() - 0.5) * 1300);
+    m.userData.speed = 2 + Math.random() * 3;
+    scene.add(m);
+    clouds.push(m);
   }
 }
 
