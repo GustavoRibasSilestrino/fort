@@ -128,6 +128,9 @@ export function buildTargetRel(a, yaw, pitch, type, mat) {
   }
   const fi = pci + DX[d], fj = pcj + DZ[d];
   const up = pitch > 0.45;                         // olhando para cima: peca por cima da cabeca
+  // ja existe uma escada na celula da frente? entao piso/escada/cone vao em cima dela
+  let onRamp = false;
+  if (type === 'floor' || type === 'ramp') for (const p of allPieces) if (p.type === 'ramp' && p.i === fi && p.j === fj && Math.abs(p.y - fwd) < 0.3) { onRamp = true; break; }
   let t;
   if (type === 'wall') {
     let axis, i, j;
@@ -136,11 +139,11 @@ export function buildTargetRel(a, yaw, pitch, type, mat) {
     t = { type: 'wall', axis, i, j, y: base };
     if (pieceExists(t)) t = { ...t, y: base + H };   // ja tem parede: empilha
   } else if (type === 'floor') {
-    t = up ? { type: 'floor', i: pci, j: pcj, y: base + H } : { type: 'floor', i: fi, j: fj, y: fwd };
+    t = up ? { type: 'floor', i: pci, j: pcj, y: base + H } : { type: 'floor', i: fi, j: fj, y: onRamp ? fwd + H : fwd };
   } else if (type === 'roof') {
     t = up ? { type: 'roof', i: pci, j: pcj, y: base + H } : { type: 'roof', i: fi, j: fj, y: fwd + H };
   } else {
-    t = { type: 'ramp', i: fi, j: fj, dir: d, y: fwd };
+    t = { type: 'ramp', i: fi, j: fj, dir: d, y: onRamp ? fwd + H : fwd };
   }
   t.mat = mat;
   return t;

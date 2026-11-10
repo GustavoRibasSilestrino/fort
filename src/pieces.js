@@ -441,34 +441,18 @@ function inFront(t, a, yaw) {
 function connBoxes(o) {
   if (o.type !== 'ramp') return [aabbOf(o)];
   const x0 = o.i * G, z0 = o.j * G, x1 = x0 + G, z1 = z0 + G, y = o.y, w = 0.25;
+  const slab = [x0, y + H - 0.4, z0, x1, y + H, z1];   // por cima da escada tambem conecta (piso, cone, outra escada)
   switch (o.dir) {
-    case 0: return [[x1 - w, y + H - 0.4, z0, x1, y + H, z1], [x0, y - 0.2, z0, x0 + w, y + 0.2, z1]];
-    case 2: return [[x0, y + H - 0.4, z0, x0 + w, y + H, z1], [x1 - w, y - 0.2, z0, x1, y + 0.2, z1]];
-    case 1: return [[x0, y + H - 0.4, z1 - w, x1, y + H, z1], [x0, y - 0.2, z0, x1, y + 0.2, z0 + w]];
-    default: return [[x0, y + H - 0.4, z0, x1, y + H, z0 + w], [x0, y - 0.2, z1 - w, x1, y + 0.2, z1]];
+    case 0: return [slab, [x0, y - 0.2, z0, x0 + w, y + 0.2, z1]];
+    case 2: return [slab, [x1 - w, y - 0.2, z0, x1, y + 0.2, z1]];
+    case 1: return [slab, [x0, y - 0.2, z0, x1, y + 0.2, z0 + w]];
+    default: return [slab, [x0, y - 0.2, z1 - w, x1, y + 0.2, z1]];
   }
 }
 const boxHit = (b, q, e) => b[0] - e <= q[3] && b[3] + e >= q[0] && b[1] - e <= q[4] && b[4] + e >= q[1] && b[2] - e <= q[5] && b[5] + e >= q[2];
 export function canPlace(t, a) {
   const tb = connBoxes(t), e = 0.2;
   const pci = Math.floor(a.x / G), pcj = Math.floor(a.z / G);
-  for (const p of allPieces) {
-    if (t.type === 'ramp' && p.type === 'wall' && Math.abs(p.y - t.y) < 0.5) {   // nao fechar a propria escada
-      const ends = t.dir === 0 || t.dir === 2 ? p.axis === 'z' && p.j === t.j && (p.i === t.i || p.i === t.i + 1) : p.axis === 'x' && p.i === t.i && (p.j === t.j || p.j === t.j + 1);
-      if (ends) return false;
-    }
-    if (p.type === 'ramp' && Math.abs(p.y - t.y) < 0.5) {
-      // parede nao pode fechar as pontas da escada
-      if (t.type === 'wall') {
-        const ends = p.dir === 0 || p.dir === 2 ? t.axis === 'z' && t.j === p.j && (t.i === p.i || t.i === p.i + 1) : t.axis === 'x' && t.i === p.i && (t.j === p.j || t.j === p.j + 1);
-        if (ends) return false;
-      }
-    }
-    // piso/cone em cima da escada: so quando o jogador esta subindo nela
-    if ((t.type === 'floor' || t.type === 'roof') && p.type === 'ramp' && p.i === t.i && p.j === t.j && t.y > p.y + 0.5) {
-      if (!(pci === p.i && pcj === p.j && a.y > p.y + 0.3)) return false;
-    }
-  }
   for (const p of allPieces) {
     for (const q of connBoxes(p)) for (const b of tb) if (boxHit(b, q, e)) return true;
   }
