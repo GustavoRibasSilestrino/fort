@@ -8,32 +8,63 @@ export const slopeAt = () => 0;
 export const padAt = () => null;
 
 function groundTexture(renderer) {
-  // estilo Roblox: base verde com "studs" (pininhos) a cada 1 m
+  // grama natural: base verde com manchas suaves e muitos tracos de folhas (sem grade, sem "pininhos")
+  const SZ = 512;
   const cv = document.createElement('canvas');
-  cv.width = cv.height = 512; // 8 m x 8 m
+  cv.width = cv.height = SZ;
   const ctx = cv.getContext('2d');
-  ctx.fillStyle = '#4fbf3a'; ctx.fillRect(0, 0, 512, 512);
-  const cell = 64; // 1 m
-  for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) {
-    const cx = i * cell + cell / 2, cy = j * cell + cell / 2;
-    ctx.fillStyle = 'rgba(0,70,0,0.28)'; ctx.beginPath(); ctx.ellipse(cx + 3, cy + 5, 17, 14, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = '#6bd84f'; ctx.beginPath(); ctx.ellipse(cx, cy, 17, 14, 0, 0, 7); ctx.fill();
-    ctx.fillStyle = '#86e868'; ctx.beginPath(); ctx.ellipse(cx - 2, cy - 3, 11, 8, 0, 0, 7); ctx.fill();
+  let seed = 99;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  ctx.fillStyle = '#5db83c'; ctx.fillRect(0, 0, SZ, SZ);
+  const wrapDraw = (fn) => { for (const ox of [-SZ, 0, SZ]) for (const oy of [-SZ, 0, SZ]) fn(ox, oy); };
+  // manchas grandes claras/escuras
+  for (let i = 0; i < 46; i++) {
+    const x = rnd() * SZ, y = rnd() * SZ, r = 30 + rnd() * 70, light = rnd() > 0.5;
+    wrapDraw((ox, oy) => {
+      const g = ctx.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+      g.addColorStop(0, light ? 'rgba(150,225,90,0.32)' : 'rgba(30,110,40,0.30)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = g; ctx.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
+    });
   }
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 2;
-  for (let i = 0; i <= 8; i += 4) { ctx.beginPath(); ctx.moveTo(i * cell, 0); ctx.lineTo(i * cell, 512); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, i * cell); ctx.lineTo(512, i * cell); ctx.stroke(); }
+  // folhas de grama
+  const tones = ['#3f9d33', '#4fb23a', '#6bc948', '#82d85a', '#2f8a30', '#9be66a'];
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 5200; i++) {
+    const x = rnd() * SZ, y = rnd() * SZ, len = 5 + rnd() * 9, ang = -Math.PI / 2 + (rnd() - 0.5) * 1.1;
+    ctx.strokeStyle = tones[(rnd() * tones.length) | 0]; ctx.globalAlpha = 0.55 + rnd() * 0.4; ctx.lineWidth = 1 + rnd() * 1.6;
+    wrapDraw((ox, oy) => { ctx.beginPath(); ctx.moveTo(x + ox, y + oy); ctx.lineTo(x + ox + Math.cos(ang) * len, y + oy + Math.sin(ang) * len); ctx.stroke(); });
+  }
+  ctx.globalAlpha = 1;
+  // algumas florzinhas e pontos de terra
+  const fl = ['#ffe45e', '#ffffff', '#ff9bd0'];
+  for (let i = 0; i < 38; i++) {
+    const x = rnd() * SZ, y = rnd() * SZ;
+    ctx.fillStyle = fl[(rnd() * fl.length) | 0];
+    wrapDraw((ox, oy) => { ctx.beginPath(); ctx.arc(x + ox, y + oy, 1.6, 0, 7); ctx.fill(); });
+  }
   const tex = new THREE.CanvasTexture(cv);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set((WORLD_HALF * 2) / 8, (WORLD_HALF * 2) / 8);
+  tex.repeat.set((WORLD_HALF * 2) / 16, (WORLD_HALF * 2) / 16);   // 1 textura = 16 m
   tex.colorSpace = THREE.SRGBColorSpace;
-  tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  tex.anisotropy = Math.min(16, renderer.capabilities.getMaxAnisotropy());
   return tex;
 }
 
 export function buildGround(scene, renderer) {
-  const geo = new THREE.PlaneGeometry(WORLD_HALF * 2, WORLD_HALF * 2, 1, 1);
+  // plano subdividido com variacao de cor em grande escala (evita aspecto repetido)
+  const SEG = 80;
+  const geo = new THREE.PlaneGeometry(WORLD_HALF * 2, WORLD_HALF * 2, SEG, SEG);
   geo.rotateX(-Math.PI / 2);
-  const mat = new THREE.MeshLambertMaterial({ map: groundTexture(renderer), polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 });
+  const pos = geo.attributes.position, col = new Float32Array(pos.count * 3);
+  const c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    const n = Math.sin(x * 0.021) * Math.cos(z * 0.017) + Math.sin(x * 0.047 + z * 0.031) * 0.6 + Math.sin(z * 0.09) * 0.25;
+    c.setRGB(0.92 + n * 0.07, 0.96 + n * 0.07, 0.9 + n * 0.05);
+    col[i * 3] = c.r; col[i * 3 + 1] = c.g; col[i * 3 + 2] = c.b;
+  }
+  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  const mat = new THREE.MeshLambertMaterial({ map: groundTexture(renderer), vertexColors: true, polygonOffset: true, polygonOffsetFactor: 2, polygonOffsetUnits: 2 });
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.position.y = -0.02;
